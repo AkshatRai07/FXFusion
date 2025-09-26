@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Basket, PriceData, UserBalance } from './types';
 
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 interface WalletState {
   isConnected: boolean;
   address: string | null;
@@ -17,6 +23,24 @@ interface PriceState {
   updatePrices: (prices: Record<string, PriceData>) => void;
 }
 
+export const usePriceStore = create<PriceState>((set) => ({
+  prices: {},
+  updatePrice: (symbol, data) => {
+    console.log("Store: Updating single price:", symbol, data);
+    set((state) => ({
+      prices: { ...state.prices, [symbol]: data },
+    }));
+  },
+  updatePrices: (prices) => {
+    // This console log will now show the clean, incoming price batches
+    console.log("Store: Updating multiple prices:", prices);
+    set((state) => ({
+      // Merging with the previous state is still correct for batch updates
+      prices: { ...state.prices, ...prices },
+    }));
+  },
+}));
+
 interface BasketState {
   userBaskets: Basket[];
   publicBaskets: Basket[];
@@ -26,55 +50,6 @@ interface BasketState {
   setSelectedBasket: (basket: Basket | null) => void;
   updateUserBalances: (balances: UserBalance[]) => void;
 }
-
-export const useWalletStore = create<WalletState>((set, get) => ({
-  isConnected: false,
-  address: null,
-  provider: null,
-  signer: null,
-  connect: async () => {
-    try {
-      if (typeof window.ethereum !== 'undefined') {
-        const { ethers } = await import('ethers');
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        await provider.send('eth_requestAccounts', []);
-        const signer = await provider.getSigner();
-        const address = await signer.getAddress();
-        
-        set({
-          isConnected: true,
-          address,
-          provider,
-          signer,
-        });
-      }
-    } catch (error) {
-      console.error('Failed to connect wallet:', error);
-    }
-  },
-  disconnect: () => {
-    set({
-      isConnected: false,
-      address: null,
-      provider: null,
-      signer: null,
-    });
-  },
-}));
-
-export const usePriceStore = create<PriceState>()(
-  persist(
-    (set) => ({
-      prices: {},
-      updatePrice: (symbol, data) =>
-        set((state) => ({
-          prices: { ...state.prices, [symbol]: data },
-        })),
-      updatePrices: (prices) => set({ prices }),
-    }),
-    { name: 'price-storage' }
-  )
-);
 
 export const useBasketStore = create<BasketState>()(
   persist(
@@ -137,7 +112,7 @@ export const useBasketStore = create<BasketState>()(
         { symbol: 'USD', balance: 5000, swappedFrom: 'INR', eligible: true },
         { symbol: 'EUR', balance: 2000, swappedFrom: 'USD', eligible: true },
         { symbol: 'JPY', balance: 150000, swappedFrom: 'USD', eligible: true },
-        { symbol: 'INR', balance: 80000, swappedFrom: null, eligible: false },
+        { symbol: 'INR', balance: 80000, swappedFrom: undefined, eligible: false },
       ],
       addBasket: (basket) =>
         set((state) => ({
@@ -149,3 +124,38 @@ export const useBasketStore = create<BasketState>()(
     { name: 'basket-storage' }
   )
 );
+
+export const useWalletStore = create<WalletState>((set, get) => ({
+  isConnected: false,
+  address: null,
+  provider: null,
+  signer: null,
+  connect: async () => {
+    try {
+      if (typeof window.ethereum !== 'undefined') {
+        const { ethers } = await import('ethers');
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send('eth_requestAccounts', []);
+        const signer = await provider.getSigner();
+        const address = await signer.getAddress();
+
+        set({
+          isConnected: true,
+          address,
+          provider,
+          signer,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+    }
+  },
+  disconnect: () => {
+    set({
+      isConnected: false,
+      address: null,
+      provider: null,
+      signer: null,
+    });
+  },
+}));
