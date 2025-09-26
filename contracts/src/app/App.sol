@@ -32,6 +32,13 @@ contract App {
     mapping(string => bytes32) public nameToId;
     mapping(string => address) public nameToAddress;
 
+    mapping(bytes32 => address) public swapContracts;
+
+    event TokensBoughtWithFlow(address indexed user, address indexed token, uint256 flowAmount, uint256 tokenAmount);
+    event TokensSoldForFlow(address indexed user, address indexed token, uint256 tokenAmount, uint256 flowAmount);
+    event LiquidityAdded(address indexed user, address indexed swapContract, uint256 lpTokensMinted);
+    event LiquidityRemoved(address indexed user, address indexed swapContract, uint256 amountAReturned, uint256 amountBReturned);
+
     uint256 public constant DECIMALS = 18;
 
     constructor(
@@ -64,6 +71,8 @@ contract App {
         nameToId["fINR"] = USD_INR;
         nameToId["fUSD"] = USDC_USD;
         nameToId["fYEN"] = USD_YEN;
+
+        swapContracts[tokenA < tokenB ? keccak256(abi.encodePacked(tokenA, tokenB)) : keccak256(abi.encodePacked(tokenB, tokenA))] = address(0);
     }
 
     function updatePrice(bytes[] calldata updateData) public payable {
@@ -119,5 +128,81 @@ contract App {
         uint256 flowPerTokenRate = (flowPriceInUsd * 10**DECIMALS) / tokenPriceInUsd;
 
         IForeignToken(tokenAddress).buyTokens{value: ethForPurchase}(flowPerTokenRate);
+        emit TokensBoughtWithFlow(msg.sender, tokenAddress, ethForPurchase, tokenAmountReceived);
+    }
+
+    function sellTokensForFlow(string memory _tokenName, uint256 tokenAmount, bytes[] calldata updateData) external payable {
+        string memory tokenName = _tokenName;
+
+        uint256 fee = pyth.getUpdateFee(updateData);
+        require(msg.value >= fee, "Insufficient fee for Pyth update");
+        pyth.updatePriceFeeds{value: fee}(updateData);
+
+        if (msg.value > fee) {
+            payable(msg.sender).transfer(msg.value - fee);
+        }
+
+        bytes32 tokenId = nameToId[tokenName];
+        require(tokenId != bytes32(0), "Token not supported");
+        address tokenAddress = nameToAddress[tokenName];
+
+        uint256 flowPriceInUsd = getNormalizedPrice(FLOW_USD);
+        uint256 tokenPriceInUsd = getNormalizedPrice(tokenId);
+        uint256 flowPerTokenRate = (flowPriceInUsd * 10**DECIMALS) / tokenPriceInUsd;
+        uint256 ethAmountToReceive = (tokenAmount * 10**DECIMALS) / flowPerTokenRate;
+
+        IERC20(tokenAddress).transferFrom(msg.sender, address(this), tokenAmount);
+        IForeignToken(tokenAddress).sellTokens(tokenAmount, flowPerTokenRate);
+
+        payable(msg.sender).call{value : ethAmountToReceive}("");
+        emit TokensSoldForFlow(msg.sender, tokenAddress, tokenAmount, ethAmountToReceive);
+    }
+
+    function addLiquidity(string calldata _tokenNameA, string calldata _tokenNameB, uint256 amountA, uint256 amountB) external {
+        address tokenAddressA = nameToAddress[_tokenNameA];
+        address tokenAddressB = nameToAddress[_tokenNameB];
+        address swapContractAddress = swapContracts[getPairKey(tokenAddressA, tokenAddressB)];
+        require(swapContractAddress != address(0), "Swap contract for this pair not found");
+
+        IERC20(tokenAddressA).transferFrom(msg.sender, address(this), amountA);
+        IERC20(tokenAddressB).transferFrom(msg.sender, address(this), amountB);
+        
+        IERC20(tokenAddressA).approve(swapContractAddress, amountA);
+        IERC20(tokenAddressB).approve(swapContractAddress, amountB);
+        
+        uint256 lpBalanceBefore = IERC20(swapContractAddress).balanceOf(address(this));
+        IFiatSwap(swapContractAddress).addLiquidity(amountA, amountB);
+        uint256 lpBalanceAfter = IERC20(swapContractAddress).balanceOf(address(this));
+        uint256 mintedLp = lpBalanceAfter - lpBalanceBefore;
+
+        require(mintedLp > 0, "No liquidity tokens minted");
+        IERC20(swapContractAddress).transfer(msg.sender, mintedLp);
+
+        emit LiquidityAdded(msg.sender, swapContractAddress, mintedLp);
+    }
+
+    function removeLiquidity(string calldata _tokenNameA, string calldata _tokenNameB, uint256 lpTokenAmount) external {
+        address tokenAddressA = nameToAddress[_tokenNameA];
+        address tokenAddressB = nameToAddress[_tokenNameB];
+        address swapContractAddress = swapContracts[getPairKey(tokenAddressA, tokenAddressB)];
+        require(swapContractAddress != address(0), "Swap contract for this pair not found");
+
+        IERC20(swapContractAddress).transferFrom(msg.sender, address(this), lpTokenAmount);
+
+        uint256 balanceABefore = IERC20(tokenAddressA).balanceOf(address(this));
+        uint256 balanceBBefore = IERC20(tokenAddressB).balanceOf(address(this));
+        
+        IFiatSwap(swapContractAddress).removeLiquidity(lpTokenAmount);
+        
+        uint256 balanceAAfter = IERC20(tokenAddressA).balanceOf(address(this));
+        uint256 balanceBAfter = IERC20(tokenAddressB).balanceOf(address(this));
+        
+        uint256 receivedA = balanceAAfter - balanceABefore;
+        uint256 receivedB = balanceBAfter - balanceBBefore;
+
+        IERC20(tokenAddressA).transfer(msg.sender, receivedA);
+        IERC20(tokenAddressB).transfer(msg.sender, receivedB);
+
+        emit LiquidityRemoved(msg.sender, swapContractAddress, receivedA, receivedB);
     }
 }
