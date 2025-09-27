@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
-import { HermesClient } from '@pythnetwork/hermes-client';
 import contractJson from "@/contracts/out/App.sol/App.json";
 
 // --- Configuration ---
@@ -27,7 +26,7 @@ export async function POST(request: NextRequest) {
              return NextResponse.json({ success: false, error: 'Could not fetch valid prices for pair' }, { status: 500 });
         }
 
-        const rateAtoB = (priceA * SCALE) / priceB;
+        const rateAtoB = (priceB * SCALE) / priceA;
         const amountBWei = (amountAWei * rateAtoB) / SCALE;
 
         return NextResponse.json({

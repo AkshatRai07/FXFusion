@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useWalletStore, useBasketStore } from '@/lib/store';
-import { Contract } from 'ethers';
+import { Contract, EventLog } from 'ethers';
 import AppContract from '@/contracts/out/App.sol/App.json';
+import BasketJsonNFTContract from '@/contracts/out/BasketJsonNFT.sol/BasketJsonNFT.json';
 import { BasketCard } from './basket-card';
 import { Skeleton } from './skeleton';
 import { Basket } from '@/lib/types';
@@ -46,6 +47,9 @@ export function UserBaskets() {
                 const filter = contract.filters.BasketCreated(address);
                 const events = await contract.queryFilter(filter);
 
+                const basketNFTAddress = await contract.basketNFT();
+                const basketNftContract = new Contract(basketNFTAddress, BasketJsonNFTContract.abi, signer);
+
                 if (events.length === 0) {
                     setUserBaskets([]);
                     setIsLoading(false);
@@ -54,12 +58,13 @@ export function UserBaskets() {
 
                 const fetchedBaskets: Basket[] = await Promise.all(
                     events.map(async (event) => {
-                        const { user, nftId, tokens, amounts } = event.args;
+                        const eventLog = event as EventLog;
+                        const { user, nftId, tokens, amounts } = eventLog.args;
 
                         // Fetch on-chain struct data and metadata URI
                         const [basketData, tokenUri] = await Promise.all([
                             contract.nftBaskets(nftId),
-                            contract.basketNFT.tokenURI(nftId)
+                            basketNftContract.tokenURI(nftId)
                         ]);
 
                         // Parse metadata from URI

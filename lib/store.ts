@@ -44,6 +44,7 @@ interface BasketState {
   selectedBasket: Basket | null;
   userBalances: UserBalance[];
   addBasket: (basket: Basket) => void;
+  setUserBaskets: (baskets: Basket[]) => void;
   setSelectedBasket: (basket: Basket | null) => void;
   setUserBalances: (balances: UserBalance[]) => void;
 }
@@ -58,6 +59,7 @@ export const useBasketStore = create<BasketState>()(
         set((state) => ({
           userBaskets: [...state.userBaskets, basket],
         })),
+      setUserBaskets: (baskets) => set({ userBaskets: baskets }),
       setSelectedBasket: (basket) => set({ selectedBasket: basket }),
       setUserBalances: (balances) => set({ userBalances: balances }), // Rename function
     }),
