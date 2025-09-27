@@ -199,26 +199,30 @@ contract App {
         PythStructs.Price memory pythPrice = pyth.getPriceUnsafe(priceId);
         require(pythPrice.price > 0, "Pyth price is invalid");
 
-        uint256 price = uint256(int256(pythPrice.price));
-        uint256 expo = uint256(int256(-pythPrice.expo)); // Make the exponent positive
+        int256 price = int256(pythPrice.price);
+        int32 expo = pythPrice.expo; // can be negative!
 
-        // Check if it's an XYZ/USD pair that needs to be inverted.
+        // Convert to 1e18 fixed-point
+        int256 scaleDiff = 18 + expo; 
+        uint256 normalized;
+
+        if (scaleDiff >= 0) {
+            normalized = uint256(price) * (10 ** uint32(scaleDiff));
+        } else {
+            normalized = uint256(price) / (10 ** uint32(-scaleDiff));
+        }
+
+        // Invert if it's an XYZ/USD feed (we want USD/XYZ)
         if (
             priceId == FLOW_USD ||
             priceId == GBP_USD ||
             priceId == EUR_USD ||
             priceId == USDC_USD
         ) {
-            return (10 ** expo * 10 ** DECIMALS) / price;
+            normalized = (1e36) / normalized; // 1e36 so result stays 1e18
         }
-        // Handle USD/XYZ pairs.
-        else if (
-            priceId == USD_CHF || priceId == USD_INR || priceId == USD_YEN
-        ) {
-            return (price * 10 ** DECIMALS) / 10 ** expo;
-        } else {
-            revert("Price feed not supported");
-        }
+
+        return normalized;
     }
 
     function getPairKey(
@@ -256,8 +260,7 @@ contract App {
         uint256 flowPriceInUsd = getNormalizedPrice(FLOW_USD);
         uint256 tokenPriceInUsd = getNormalizedPrice(tokenId);
 
-        uint256 flowPerTokenRate = (flowPriceInUsd * 10 ** DECIMALS) /
-            tokenPriceInUsd;
+        uint256 flowPerTokenRate = (flowPriceInUsd * SCALE) / tokenPriceInUsd;
 
         IForeignToken(tokenAddress).buyTokens{value: ethForPurchase}(
             flowPerTokenRate
@@ -296,10 +299,8 @@ contract App {
 
         uint256 flowPriceInUsd = getNormalizedPrice(FLOW_USD);
         uint256 tokenPriceInUsd = getNormalizedPrice(tokenId);
-        uint256 flowPerTokenRate = (flowPriceInUsd * 10 ** DECIMALS) /
-            tokenPriceInUsd;
-        uint256 ethAmountToReceive = (tokenAmount * 10 ** DECIMALS) /
-            flowPerTokenRate;
+        uint256 flowPerTokenRate = (flowPriceInUsd * SCALE) / tokenPriceInUsd;
+        uint256 ethAmountToReceive = (tokenAmount * SCALE) / flowPerTokenRate;
 
         IERC20(tokenAddress).transferFrom(
             msg.sender,
