@@ -7,6 +7,11 @@ import { BrowserProvider, Contract, formatUnits } from 'ethers';
 import { Skeleton } from './skeleton';
 import { Button } from './button';
 
+interface EthereumError extends Error {
+  code?: number;
+  data?: unknown;
+}
+
 const tokenIcons: Record<string, JSX.Element> = {
     USD: <DollarSign className="h-6 w-6 text-green-500" />,
     EUR: <Euro className="h-6 w-6 text-blue-500" />,
@@ -18,12 +23,12 @@ const tokenIcons: Record<string, JSX.Element> = {
 
 // Contract addresses (replace with env variables if needed)
 const tokenContracts = [
-    { symbol: 'USD', address: '0xA917e1B9265F1F5AB7DBFd1F8875931bA0842ddC' },
-    { symbol: 'EUR', address: '0x591410442a00E077f54c04AB4A9B686303C10431' },
-    { symbol: 'GBP', address: '0xE3e37BaFf1Cf0fE383a5eF9dF65381618751cA34' },
-    { symbol: 'JPY', address: '0x2eDe85B1C710301F75A40c6428DcE8826210f9D2' },
-    { symbol: 'INR', address: '0x5733FAd1A99329666F5468F9b8F9113833740971' },
-    { symbol: 'CHF', address: '0x1c88E6B275e9FcFCbc95BD494b97394bf41b8517' },
+    { symbol: 'fUSD', address: '0xA917e1B9265F1F5AB7DBFd1F8875931bA0842ddC' },
+    { symbol: 'fEUR', address: '0x591410442a00E077f54c04AB4A9B686303C10431' },
+    { symbol: 'fGBP', address: '0xE3e37BaFf1Cf0fE383a5eF9dF65381618751cA34' },
+    { symbol: 'fYEN', address: '0x2eDe85B1C710301F75A40c6428DcE8826210f9D2' },
+    { symbol: 'fINR', address: '0x5733FAd1A99329666F5468F9b8F9113833740971' },
+    { symbol: 'fCHF', address: '0x1c88E6B275e9FcFCbc95BD494b97394bf41b8517' },
 ];
 
 // Minimal ERC20 ABI
@@ -44,6 +49,32 @@ export function YourTokens() {
             try {
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 setAccount(accounts[0]);
+                try {
+                    await window.ethereum.request({
+                    method: "wallet_switchEthereumChain",
+                    params: [{ chainId: "0x221" }],
+                    });
+                } catch (error) {
+                    const switchError = error as EthereumError;
+                    if (switchError.code === 4902) {
+                    await window.ethereum.request({
+                        method: "wallet_addEthereumChain",
+                        params: [{
+                        chainId: "0x221",
+                        chainName: "Flow EVM Testnet",
+                        nativeCurrency: {
+                            name: "Flow Testnet",
+                            symbol: "FLOWT",
+                            decimals: 18,
+                        },
+                        rpcUrls: ["https://testnet.evm.nodes.onflow.org"],
+                        blockExplorerUrls: ["https://evm-testnet.flowscan.io"],
+                        }],
+                    });
+                    } else {
+                        throw switchError;
+                    }
+                }
             } catch (error) {
                 console.error("Failed to connect wallet:", error);
             }
@@ -62,7 +93,7 @@ export function YourTokens() {
                     try {
                         const contract = new Contract(token.address, erc20Abi, provider);
                         const bal = await contract.balanceOf(user);
-                        const balance = parseFloat(formatUnits(bal, 18)); // assuming 18 decimals
+                        const balance = parseFloat(formatUnits(bal, 18));
                         return { symbol: token.symbol, balance };
                     } catch (err) {
                         console.error(`Error fetching ${token.symbol} balance:`, err);

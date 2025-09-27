@@ -251,6 +251,8 @@ contract App {
         require(tokenId != bytes32(0), "Token not supported");
         address tokenAddress = nameToAddress[tokenName];
 
+        uint256 balanceBefore = IERC20(tokenAddress).balanceOf(address(this));
+
         uint256 flowPriceInUsd = getNormalizedPrice(FLOW_USD);
         uint256 tokenPriceInUsd = getNormalizedPrice(tokenId);
 
@@ -261,7 +263,10 @@ contract App {
             flowPerTokenRate
         );
 
-        uint256 tokenAmountReceived = ethForPurchase * flowPerTokenRate;
+        uint256 balanceAfter = IERC20(tokenAddress).balanceOf(address(this));
+        uint256 tokenAmountReceived = balanceAfter - balanceBefore;
+        IERC20(tokenAddress).transfer(msg.sender, tokenAmountReceived);
+
         emit TokensBoughtWithFlow(
             msg.sender,
             tokenAddress,
