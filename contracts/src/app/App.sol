@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import { FiatSwap } from "../swaps/FiatSwap.sol";
+import { BasketJsonNFT } from "../nfts/BasketJsonNFT.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { PythStructs } from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import { FiatSwap } from "../swaps/FiatSwap.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 // Interface to interact with your f-Token contracts (fCHF, fEUR, etc.)
@@ -30,6 +31,18 @@ interface IFiatSwap {
 
 contract App {
     IPyth pyth;
+    BasketJsonNFT public basketNFT;
+    uint256 public constant SCALE = 1e18;
+
+    struct Basket {
+        address owner;
+        string inputToken;
+        uint256 unlockTimestamp;
+        string[] outputTokens;
+        uint256[] outputAmounts;
+    }
+
+    mapping(uint256 => Basket) public nftBaskets;
 
     address public constant PythAddress = 0x2880aB155794e7179c9eE2e38200202908C17B43;
     bytes32 public constant FLOW_USD = 0x2fb245b9a84554a0f15aa123cbb5f64cd263b59e9a87d80148cbffab50c69f30;
@@ -49,13 +62,15 @@ contract App {
 
     mapping(string => bytes32) public nameToId;
     mapping(string => address) public nameToAddress;
-
+    mapping(address => string) public addressToName;
     mapping(bytes32 => address) public swapContracts;
 
     event TokensBoughtWithFlow(address indexed user, address indexed token, uint256 flowAmount, uint256 tokenAmount);
     event TokensSoldForFlow(address indexed user, address indexed token, uint256 tokenAmount, uint256 flowAmount);
     event LiquidityAdded(address indexed user, address indexed swapContract, uint256 lpTokensMinted);
     event LiquidityRemoved(address indexed user, address indexed swapContract, uint256 amountAReturned, uint256 amountBReturned);
+    event BasketCreated(address indexed user, uint256 indexed nftId, string[] tokens, uint256[] amounts);
+    event BasketRedeemed(address indexed user, uint256 indexed nftId, uint256 amountRedeemed);
 
     uint256 public constant DECIMALS = 18;
 
@@ -65,9 +80,11 @@ contract App {
         address _fGBP_Address,
         address _fINR_Address,
         address _fUSD_Address,
-        address _fYEN_Address
+        address _fYEN_Address,
+        address _basketNFTAddress
     ) {
         pyth = IPyth(PythAddress);
+        basketNFT = BasketJsonNFT(_basketNFTAddress);
 
         fCHF_Address = _fCHF_Address;
         fEUR_Address = _fEUR_Address;
@@ -77,11 +94,17 @@ contract App {
         fYEN_Address = _fYEN_Address;
 
         nameToAddress["fCHF"] = _fCHF_Address;
+        addressToName[_fCHF_Address] = "fCHF";
         nameToAddress["fEUR"] = _fEUR_Address;
+        addressToName[_fEUR_Address] = "fEUR";
         nameToAddress["fGBP"] = _fGBP_Address;
+        addressToName[_fGBP_Address] = "fGBP";
         nameToAddress["fINR"] = _fINR_Address;
+        addressToName[_fINR_Address] = "fINR";
         nameToAddress["fUSD"] = _fUSD_Address;
+        addressToName[_fUSD_Address] = "fUSD";
         nameToAddress["fYEN"] = _fYEN_Address;
+        addressToName[_fYEN_Address] = "fYEN";
 
         nameToId["fCHF"] = USD_CHF;
         nameToId["fEUR"] = EUR_USD;
@@ -245,5 +268,152 @@ contract App {
         IERC20(tokenAddressB).transfer(msg.sender, receivedB);
 
         emit LiquidityRemoved(msg.sender, swapContractAddress, receivedA, receivedB);
+    }
+
+    function executeBasket(
+        string memory _inputTokenName,
+        uint256 _inputAmount,
+        string[] memory _outputTokenNames,
+        uint256[] memory _outputPercentages,
+        uint256 _basket_lockout_period,
+        string memory _jsonMetadata,
+        bytes[] calldata updateData
+    ) external payable {
+        require(_outputTokenNames.length == _outputPercentages.length, "Arrays must have same length");
+        uint256 totalPercentage;
+        for(uint i = 0; i < _outputPercentages.length; i++) {
+            totalPercentage += _outputPercentages[i];
+        }
+        require(totalPercentage == 10000, "Percentages must sum to 10000");
+
+        uint256 fee = pyth.getUpdateFee(updateData);
+        require(msg.value >= fee, "Insufficient fee for Pyth update");
+        pyth.updatePriceFeeds{value: fee}(updateData);
+        if (msg.value > fee) {
+            payable(msg.sender).transfer(msg.value - fee);
+        }
+
+        address inputTokenAddress = nameToAddress[_inputTokenName];
+        require(inputTokenAddress != address(0), "Invalid input token");
+        IERC20(inputTokenAddress).transferFrom(msg.sender, address(this), _inputAmount);
+
+        uint256[] memory outputAmounts = new uint256[](_outputTokenNames.length);
+        uint256 inputTokenPrice = getNormalizedPrice(nameToId[_inputTokenName]);
+
+        for (uint i = 0; i < _outputTokenNames.length; i++) {
+            uint256 amountToSwap = (_inputAmount * _outputPercentages[i]) / 10000;
+            outputAmounts[i] = _performSwap(
+                inputTokenAddress,
+                _outputTokenNames[i],
+                amountToSwap,
+                inputTokenPrice
+            );
+        }
+
+        uint256 nftId = basketNFT.nextTokenId();
+        nftBaskets[nftId] = Basket({
+            owner: msg.sender,
+            inputToken: _inputTokenName,
+            unlockTimestamp: block.timestamp + _basket_lockout_period,
+            outputTokens: _outputTokenNames,
+            outputAmounts: outputAmounts
+        });
+        
+        basketNFT.mintNFT(_jsonMetadata);
+
+        emit BasketCreated(msg.sender, nftId, _outputTokenNames, outputAmounts);
+    }
+    
+    function redeemBasket(uint256 _nftId, bytes[] calldata updateData) external payable {
+        require(basketNFT.ownerOf(_nftId) == msg.sender, "Not the owner of the NFT");
+        Basket storage basket = nftBaskets[_nftId];
+        require(block.timestamp >= basket.unlockTimestamp, "Lock period has not ended");
+
+        uint256 fee = pyth.getUpdateFee(updateData);
+        require(msg.value >= fee, "Insufficient fee for Pyth update");
+        pyth.updatePriceFeeds{value: fee}(updateData);
+         if (msg.value > fee) {
+            payable(msg.sender).transfer(msg.value - fee);
+        }
+
+        uint256 totalRedeemedAmount = 0;
+        string memory inputTokenName = basket.inputToken;
+        address inputTokenAddress = nameToAddress[inputTokenName];
+        uint256 inputTokenPrice = getNormalizedPrice(nameToId[inputTokenName]);
+
+        for(uint i = 0; i < basket.outputTokens.length; i++) {
+            address outputTokenAddress = nameToAddress[basket.outputTokens[i]];
+            uint256 outputAmount = basket.outputAmounts[i];
+            
+            totalRedeemedAmount += _performRedeemSwap(
+                outputTokenAddress,
+                inputTokenAddress,
+                outputAmount,
+                inputTokenPrice
+            );
+        }
+
+        basketNFT.burn(_nftId);
+        delete nftBaskets[_nftId];
+        
+        IERC20(inputTokenAddress).transfer(msg.sender, totalRedeemedAmount);
+
+        emit BasketRedeemed(msg.sender, _nftId, totalRedeemedAmount);
+    }
+    
+    // --- INTERNAL HELPER FUNCTIONS TO PREVENT STACK TOO DEEP ---
+
+    function _performSwap(
+        address _inputTokenAddress,
+        string memory _outputTokenName,
+        uint256 _amountToSwap,
+        uint256 _inputTokenPrice
+    ) internal returns (uint256) {
+        address outputTokenAddress = nameToAddress[_outputTokenName];
+        require(outputTokenAddress != address(0), "Invalid output token");
+
+        uint256 outputTokenPrice = getNormalizedPrice(nameToId[_outputTokenName]);
+        uint256 rate = (_inputTokenPrice * SCALE) / outputTokenPrice;
+
+        address swapContractAddress = swapContracts[getPairKey(_inputTokenAddress, outputTokenAddress)];
+        require(swapContractAddress != address(0), "Swap contract not found");
+
+        IERC20(_inputTokenAddress).approve(swapContractAddress, _amountToSwap);
+
+        if (_inputTokenAddress < outputTokenAddress) {
+            IFiatSwap(swapContractAddress).swapAtoB(_amountToSwap, rate);
+        } else {
+            uint256 inverseRate = (SCALE * SCALE) / rate;
+            IFiatSwap(swapContractAddress).swapBtoA(_amountToSwap, inverseRate);
+        }
+        
+        uint256 feeAmount = (_amountToSwap * 3) / 1000;
+        uint256 amountAfterFee = _amountToSwap - feeAmount;
+        return (amountAfterFee * rate) / SCALE;
+    }
+
+    function _performRedeemSwap(
+        address _outputTokenAddress,
+        address _inputTokenAddress,
+        uint256 _outputAmount,
+        uint256 _inputTokenPrice
+    ) internal returns (uint256) {
+        string memory outputTokenName = addressToName[_outputTokenAddress];
+        uint256 outputTokenPrice = getNormalizedPrice(nameToId[outputTokenName]);
+        uint256 rate = (outputTokenPrice * SCALE) / _inputTokenPrice;
+
+        address swapContractAddress = swapContracts[getPairKey(_outputTokenAddress, _inputTokenAddress)];
+        IERC20(_outputTokenAddress).approve(swapContractAddress, _outputAmount);
+
+        if (_outputTokenAddress < _inputTokenAddress) {
+            IFiatSwap(swapContractAddress).swapAtoB(_outputAmount, rate);
+        } else {
+            uint256 inverseRate = (SCALE * SCALE) / rate;
+            IFiatSwap(swapContractAddress).swapBtoA(_outputAmount, inverseRate);
+        }
+
+        uint256 feeAmount = (_outputAmount * 3) / 1000;
+        uint256 amountAfterFee = _outputAmount - feeAmount;
+        return (amountAfterFee * rate) / SCALE;
     }
 }
