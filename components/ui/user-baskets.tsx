@@ -9,7 +9,7 @@ import { BasketCard } from './basket-card';
 import { Skeleton } from './skeleton';
 import { Basket } from '@/lib/types';
 
-// Helper to parse Base64 JSON URI
+
 function parseTokenUri(uri: string): any {
     const base64Json = uri.split('data:application/json;base64,')[1];
     if (!base64Json) return null;
