@@ -10,11 +10,13 @@ import { Plus, TrendingUp, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { LiquidityModal } from '@/components/ui/liquidity-modal';
 
 export default function Dashboard() {
   const isConnected = useWalletStore(state => state.isConnected);
   const { userBaskets, publicBaskets } = useBasketStore();
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isConnected) {
@@ -36,13 +38,20 @@ export default function Dashboard() {
               <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
               <p className="text-gray-400">Manage your FX baskets and track performance</p>
             </div>
-            <div className="mt-4 md:mt-0">
+            <div className="mt-4 md:mt-0 flex items-center gap-4">
               <Button
                 onClick={() => setIsBuyModalOpen(true)}
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
                 <ShoppingCart className="w-4 h-4 mr-2" />
                 Buy Tokens
+              </Button>
+              <Button
+                onClick={() => setIsLiquidityModalOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Manage Liquidity
               </Button>
             </div>
           </div>
@@ -92,28 +101,17 @@ export default function Dashboard() {
         </section>
 
         {/* Public Baskets Section */}
-        <section>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-white">Popular Baskets</h2>
-            <Link href="/baskets">
-              <Button variant="outline" className="border-slate-700 text-gray-300 hover:text-white hover:bg-slate-800">
-                View All
-              </Button>
-            </Link>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {publicBaskets.slice(0, 6).map((basket) => (
-              <BasketCard key={basket.id} basket={basket} />
-            ))}
-          </div>
-        </section>
       </div>
 
       {/* Buy Tokens Modal */}
       <BuyTokensModal
         isOpen={isBuyModalOpen}
         onClose={() => setIsBuyModalOpen(false)}
+      />
+      <LiquidityModal
+        isOpen={isLiquidityModalOpen}
+        onClose={() => setIsLiquidityModalOpen(false)}
       />
     </div>
   );
