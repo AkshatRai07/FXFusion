@@ -74,7 +74,7 @@ contract App {
     bytes32 public constant EUR_USD =
         0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b;
     bytes32 public constant USDC_USD =
-        0xec7a2621453a2ef63a771f280145c3866de464b126380614532a8a183533d0a9;
+        0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a;
 
     address public immutable fCHF_Address;
     address public immutable fEUR_Address;
@@ -132,9 +132,8 @@ contract App {
         address _fINR_Address,
         address _fUSD_Address,
         address _fYEN_Address,
-        address _basketNFTAddress
-    ) //  address _lotteryPoolAddress
-    {
+        address _basketNFTAddress //  address _lotteryPoolAddress
+    ) {
         pyth = IPyth(PythAddress);
         basketNFT = BasketJsonNFT(_basketNFTAddress);
         // lotteryPool = LotteryPool(_lotteryPoolAddress);
