@@ -6,6 +6,8 @@ import { Wallet, DollarSign, Euro, PoundSterling, JapaneseYen as Yen, Banknote, 
 import { BrowserProvider, Contract, formatUnits } from 'ethers';
 import { Skeleton } from './skeleton';
 import { Button } from './button';
+import { useWalletStore, useBasketStore } from '@/lib/store';
+
 
 interface EthereumError extends Error {
     code?: number;
@@ -31,57 +33,13 @@ const tokenContracts = [
     { symbol: 'fCHF', address: process.env.NEXT_PUBLIC_fCHF_Token },
 ];
 
-// Minimal ERC20 ABI
+
 const erc20Abi = ["function balanceOf(address owner) view returns (uint256)"];
 
-type TokenBalance = {
-    symbol: string;
-    balance: number;
-};
-
 export function YourTokens() {
-    const [balances, setBalances] = useState<TokenBalance[]>([]);
+    const { isConnected, address, connect } = useWalletStore();
+    const { userBalances, setUserBalances } = useBasketStore();
     const [isLoading, setIsLoading] = useState(true);
-    const [account, setAccount] = useState<string | null>(null);
-
-    const connectWallet = async () => {
-        if (typeof window.ethereum !== 'undefined') {
-            try {
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                setAccount(accounts[0]);
-                try {
-                    await window.ethereum.request({
-                        method: "wallet_switchEthereumChain",
-                        params: [{ chainId: "0x221" }],
-                    });
-                } catch (error) {
-                    const switchError = error as EthereumError;
-                    if (switchError.code === 4902) {
-                        await window.ethereum.request({
-                            method: "wallet_addEthereumChain",
-                            params: [{
-                                chainId: "0x221",
-                                chainName: "Flow EVM Testnet",
-                                nativeCurrency: {
-                                    name: "Flow Testnet",
-                                    symbol: "FLOWT",
-                                    decimals: 18,
-                                },
-                                rpcUrls: ["https://testnet.evm.nodes.onflow.org"],
-                                blockExplorerUrls: ["https://evm-testnet.flowscan.io"],
-                            }],
-                        });
-                    } else {
-                        throw switchError;
-                    }
-                }
-            } catch (error) {
-                console.error("Failed to connect wallet:", error);
-            }
-        } else {
-            alert("Please install MetaMask.");
-        }
-    };
 
     const fetchBalances = async (user: string) => {
         try {
@@ -93,61 +51,38 @@ export function YourTokens() {
                     try {
                         if (!token.address) {
                             console.error(`Address not found for ${token.symbol}`);
-                            return { symbol: token.symbol, balance: 0 };
+                            return { symbol: token.symbol, balance: 0, eligible: false };
                         }
                         const contract = new Contract(token.address, erc20Abi, provider);
                         const bal = await contract.balanceOf(user);
                         const balance = parseFloat(formatUnits(bal, 18));
-                        return { symbol: token.symbol, balance };
+                        return { symbol: token.symbol, balance, eligible: balance > 0 };
                     } catch (err) {
                         console.error(`Error fetching ${token.symbol} balance:`, err);
-                        return { symbol: token.symbol, balance: 0 };
+                        return { symbol: token.symbol, balance: 0, eligible: false };
                     }
                 })
             );
 
-            setBalances(results);
+            setUserBalances(results);
         } catch (err) {
             console.error("Error fetching balances:", err);
-            setBalances(tokenContracts.map(t => ({ symbol: t.symbol, balance: 0 })));
+            setUserBalances(tokenContracts.map(t => ({ symbol: t.symbol, balance: 0, eligible: false })));
         } finally {
             setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        if (account) {
-            fetchBalances(account);
+        if (address) {
+            fetchBalances(address);
+        } else {
+            // When disconnected, clear balances and stop loading
+            setUserBalances([]);
+            setIsLoading(false);
         }
-    }, [account]);
+    }, [address]);
 
-    useEffect(() => {
-        const checkConnection = async () => {
-            if (typeof window.ethereum !== 'undefined') {
-                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                if (accounts.length > 0) {
-                    setAccount(accounts[0]);
-                } else {
-                    setIsLoading(false);
-                }
-            } else {
-                setIsLoading(false);
-            }
-        };
-
-        checkConnection();
-
-        if (typeof window.ethereum !== 'undefined') {
-            window.ethereum.on('accountsChanged', (accs: string[]) => {
-                if (accs.length > 0) {
-                    setAccount(accs[0]);
-                } else {
-                    setAccount(null);
-                    setBalances([]);
-                }
-            });
-        }
-    }, []);
 
     return (
         <Card className="bg-slate-800/50 border-slate-700">
@@ -159,17 +94,17 @@ export function YourTokens() {
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {isLoading ? (
+                    {isLoading && isConnected ? (
                         Array.from({ length: 6 }).map((_, i) => (
                             <Skeleton key={i} className="h-32 rounded-lg bg-slate-900/50" />
                         ))
-                    ) : !account ? (
+                    ) : !isConnected ? (
                         <div className="col-span-full text-center text-gray-400 py-8 flex flex-col items-center gap-4">
                             <p>Please connect your wallet to see your token balances.</p>
-                            <Button onClick={connectWallet}>Connect Wallet</Button>
+                            <Button onClick={connect}>Connect Wallet</Button>
                         </div>
                     ) : (
-                        balances.map((token) => (
+                        userBalances.map((token) => (
                             <div
                                 key={token.symbol}
                                 className={`p-4 rounded-lg border transition-all hover:border-slate-600 ${token.balance > 0
@@ -178,7 +113,7 @@ export function YourTokens() {
                                     }`}
                             >
                                 <div className="flex items-center space-x-3 mb-3">
-                                    {tokenIcons[token.symbol]}
+                                    {tokenIcons[token.symbol.replace('f', '')]}
                                     <div>
                                         <div className="text-white font-medium">{token.symbol}</div>
                                     </div>

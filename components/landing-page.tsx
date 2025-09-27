@@ -8,7 +8,7 @@ import { TrendingUp, Shield, Zap, ChartBar as BarChart3, DollarSign, Globe } fro
 
 export function LandingPage() {
   const { connect } = useWalletStore();
-  const { publicBaskets } = useBasketStore();
+  //  const { publicBaskets } = useBasketStore();
 
   const features = [
     {
@@ -42,7 +42,7 @@ export function LandingPage() {
           <div className="text-center space-y-8">
             <div className="space-y-4">
               <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">
-                Professional 
+                Professional
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-green-500">
                   {" "}FX Trading
                 </span>
@@ -50,20 +50,20 @@ export function LandingPage() {
                 Made Simple
               </h1>
               <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-                Create and manage diversified currency baskets with real-time performance tracking, 
+                Create and manage diversified currency baskets with real-time performance tracking,
                 powered by blockchain technology and live market data.
               </p>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button 
+              <Button
                 onClick={connect}
                 size="lg"
                 className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg"
               >
                 Get Started
               </Button>
-              <Button 
+              <Button
                 variant="outline"
                 size="lg"
                 className="border-slate-700 text-white hover:bg-slate-800 px-8 py-3 text-lg"
@@ -88,7 +88,7 @@ export function LandingPage() {
             Advanced features designed for professional FX portfolio management
           </p>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((feature, index) => (
             <div key={index} className="bg-slate-800/50 rounded-lg p-6 border border-slate-700 hover:border-slate-600 transition-colors">
@@ -101,20 +101,7 @@ export function LandingPage() {
       </section>
 
       {/* Popular Baskets Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-white mb-4">Popular Currency Baskets</h2>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Explore top-performing baskets created by the FXFusion community
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {publicBaskets.slice(0, 3).map((basket) => (
-            <BasketCard key={basket.id} basket={basket} />
-          ))}
-        </div>
-      </section>
+
 
       {/* CTA Section */}
       <section className="bg-gradient-to-r from-blue-600 to-green-600">
@@ -126,7 +113,7 @@ export function LandingPage() {
             <p className="text-blue-100 text-lg max-w-2xl mx-auto">
               Connect your wallet to access professional FX basket management tools
             </p>
-            <Button 
+            <Button
               onClick={connect}
               size="lg"
               className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-3 text-lg font-semibold"

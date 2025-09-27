@@ -15,11 +15,12 @@ export interface Basket {
 
 export interface TokenAllocation {
   symbol: string;
-  weight: number;
-  amount: number;
-  currentPrice: number;
-  pnl: number;
-  pnlPercentage: number;
+  percentage: number; // Changed from 'weight' to 'percentage' to match metadata
+  // The fields below are for display and should be calculated, not stored.
+  // amount: number;
+  // currentPrice: number;
+  // pnl: number;
+  // pnlPercentage: number;
 }
 
 export interface PriceData {

@@ -11,10 +11,12 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LiquidityModal } from '@/components/ui/liquidity-modal';
+import { UserBaskets } from '@/components/ui/user-baskets';
+
 
 export default function Dashboard() {
   const isConnected = useWalletStore(state => state.isConnected);
-  const { userBaskets, publicBaskets } = useBasketStore();
+  const { userBaskets } = useBasketStore();
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
 
