@@ -6,16 +6,16 @@ import { PriceData } from '@/lib/types';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 // CSS for the visual flash effect when a price updates
-const styles = `
-  .price-card-flash {
-    animation: flash 0.7s ease-out;
-  }
+// const styles = `
+//   .price-card-flash {
+//     animation: flash 0.7s ease-out;
+//   }
 
-  @keyframes flash {
-    0% { background-color: #4A5568; } /* A highlight color */
-    100% { background-color: #2D3748; } /* Your default card background color */
-  }
-`;
+//   @keyframes flash {
+//     0% { background-color: #4A5568; } /* A highlight color */
+//     100% { background-color: #2D3748; } /* Your default card background color */
+//   }
+// `;
 
 // This interface matches the data structure sent by our new API route
 interface ApiPriceData {
@@ -110,7 +110,7 @@ export function PriceTicker({
 
   return (
     <>
-      <style>{styles}</style>
+      {/*<style>{styles}</style>*/}
       <div className={`bg-slate-800/50 rounded-lg p-4 ${className}`}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">Live Crypto & FX Rates</h3>
