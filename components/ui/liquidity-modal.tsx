@@ -10,6 +10,17 @@ import { ethers } from 'ethers';
 
 // --- Types and Constants ---
 
+const APP_CONTRACT_ADDRESS = "0xbDAf839b2974d02B6c304218f45ddC4BEC2A86Fd";
+
+const tokenAddresses: { [key: string]: string } = {
+    'fUSD': "0xF593c97eda277dF2B6055956F924D0764BDe3e5f",
+    'fINR': "0x1093D107199F1981C3EDb052c16C5cE3f24B8EdE",
+    'fEUR': "0xe117d02216653d291Bf507ae7D7A8366d5BD7764",
+    'fGBP': "0x96b1c80f49b7D19217e1d0A426942B5d26FDcA79",
+    'fYEN': "0xE215b93453388334aA648eE7F008fb695439AC6c",
+    'fCHF': "0x3F2cF12Dd2188a08De8e84F7c3631aDeDc6705e3"
+};
+
 const availableTokens = [
     { symbol: 'fUSD', name: 'Fiat USD' },
     { symbol: 'fINR', name: 'Fiat INR' },
@@ -90,12 +101,45 @@ export function LiquidityModal({ isOpen, onClose }: LiquidityModalProps) {
         setTransactionStatus(null);
 
         try {
+            if (!window.ethereum) throw new Error('Wallet not found.');
+            let provider = new ethers.BrowserProvider(window.ethereum);
+            let signer = await provider.getSigner();
+
             const endpoint = mode === 'add' ? '/api/add-liquidity' : '/api/remove-liquidity';
             const body = mode === 'add'
                 ? { tokenNameA: tokenA, tokenNameB: tokenB, amountA }
                 : { tokenNameA: tokenA, tokenNameB: tokenB, lpTokenAmount: lpAmount };
 
-            // 1. Fetch transaction data from the backend
+            // If adding liquidity, approve tokens first
+            if (mode === 'add') {
+                const tokenAContract = new ethers.Contract(tokenAddresses[tokenA], [
+                    "function approve(address spender, uint256 amount) external returns (bool)"
+                ], signer);
+                
+                const tokenBContract = new ethers.Contract(tokenAddresses[tokenB], [
+                    "function approve(address spender, uint256 amount) external returns (bool)"
+                ], signer);
+
+                setTransactionStatus({ success: false, message: 'Approving tokens...' });
+
+                // Add 2% slippage tolerance
+                const amountAWithSlippage = ethers.parseEther((parseFloat(amountA) * 1.02).toString());
+                const amountBWithSlippage = ethers.parseEther((parseFloat(amountB) * 1.02).toString());
+
+                try {
+                    const approvalTxA = await tokenAContract.approve(APP_CONTRACT_ADDRESS, amountAWithSlippage);
+                    await approvalTxA.wait();
+                    setTransactionStatus({ success: false, message: 'First token approved, approving second token...' });
+                    
+                    const approvalTxB = await tokenBContract.approve(APP_CONTRACT_ADDRESS, amountBWithSlippage);
+                    await approvalTxB.wait();
+                    setTransactionStatus({ success: false, message: 'Tokens approved, executing transaction...' });
+                } catch (error: any) {
+                    throw new Error('Token approval failed: ' + error.message);
+                }
+            }
+
+            // Get transaction data from backend
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -108,11 +152,20 @@ export function LiquidityModal({ isOpen, onClose }: LiquidityModalProps) {
 
             const { to, value, data } = result.data;
 
+            console.log(value)
+
+            // Execute the transaction
+            let tx = await signer.sendTransaction({ 
+                to, 
+                value: BigInt(value) + 1_000_000_000n,// This includes the Pyth oracle update fee
+                data 
+            });
+
             // 2. Use the user's wallet to send the transaction
             if (!window.ethereum) throw new Error('Wallet not found.');
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-            const tx = await signer.sendTransaction({ to, value, data });
+            provider = new ethers.BrowserProvider(window.ethereum);
+            signer = await provider.getSigner();
+            tx = await signer.sendTransaction({ to, value, data });
 
             setTransactionStatus({ success: false, message: `Transaction sent... Tx: ${tx.hash.substring(0, 10)}...` });
             const receipt = await tx.wait();
