@@ -6,7 +6,7 @@ const connection = new HermesClient("https://hermes.pyth.network", {});
 
 // Contract configuration
 const APP_CONTRACT_ADDRESS = process.env.App || ""; // Add to your .env
-const PRIVATE_KEY = process.env.PRIVATE_KEY || ""; // Add to your .env
+// PRIVATE_KEY is no longer needed on the backend for this flow.
 const RPC_URL = process.env.RPC_URL || "https://testnet.evm.nodes.onflow.org"; // Flow testnet
 
 // Pyth Contract configuration on Flow EVM Testnet
@@ -30,8 +30,8 @@ const priceIds = {
 };
 
 export async function POST(request: NextRequest) {
-    if (!PRIVATE_KEY || !APP_CONTRACT_ADDRESS) {
-        console.error("Server configuration error: Make sure PRIVATE_KEY and App are set in a .env.local file in the project root.");
+    if (!APP_CONTRACT_ADDRESS) {
+        console.error("Server configuration error: Make sure App is set in a .env.local file in the project root.");
         return NextResponse.json(
             { success: false, error: "Server configuration error. Check server logs." },
             { status: 500 }
@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
     try {
         const { tokenSymbol, flowAmount } = await request.json();
 
-        // Validate inputs
         if (!tokenSymbol || !flowAmount) {
             return NextResponse.json(
                 { success: false, error: 'Missing required parameters' },
@@ -48,96 +47,48 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Map frontend token symbols to contract token names
         const tokenMapping: { [key: string]: string } = {
-            'USDC': 'fUSD',
-            'USD': 'fUSD',
-            'INR': 'fINR',
-            'EUR': 'fEUR',
-            'GBP': 'fGBP',
-            'JPY': 'fYEN',
-            'CHF': 'fCHF'
+            'USDC': 'fUSD', 'USD': 'fUSD', 'INR': 'fINR', 'EUR': 'fEUR',
+            'GBP': 'fGBP', 'JPY': 'fYEN', 'CHF': 'fCHF'
         };
-
         const contractTokenName = tokenMapping[tokenSymbol];
+
         if (!contractTokenName) {
-            return NextResponse.json(
-                { success: false, error: 'Unsupported token' },
-                { status: 400 }
-            );
+            return NextResponse.json({ success: false, error: 'Unsupported token' }, { status: 400 });
         }
 
-        console.log(`Processing buy request: ${flowAmount} FLOW -> ${contractTokenName}`);
-
-        // Get Pyth update data
         const priceUpdateData = await connection.getLatestPriceUpdates(Object.values(priceIds));
-
-        if (!priceUpdateData.binary || !priceUpdateData.binary.data) {
+        if (!priceUpdateData.binary?.data) {
             throw new Error('Failed to fetch price update data');
         }
-
         const updateDataArray = priceUpdateData.binary.data.map((data: string) => `0x${data}`);
 
-        // Initialize provider and wallet
         const provider = new ethers.JsonRpcProvider(RPC_URL);
-        const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-
-        // Initialize Pyth contract to get the update fee
         const pythContract = new ethers.Contract(PYTH_CONTRACT_ADDRESS, PYTH_ABI, provider);
-        const updateFee = await pythContract.getUpdateFee(updateDataArray); // BigInt
+        const updateFee = await pythContract.getUpdateFee(updateDataArray);
+        const flowAmountWei = ethers.parseEther(flowAmount);
+        const totalValue = flowAmountWei + updateFee;
 
-        const flowAmountWei = ethers.parseEther(flowAmount); // BigInt
+        const appInterface = new ethers.Interface(APP_ABI);
+        const transactionData = appInterface.encodeFunctionData("buyTokensFromFlow", [
+            contractTokenName,
+            updateDataArray
+        ]);
 
-        // Log values for debugging
-        console.log('updateFee (wei):', updateFee.toString());
-        console.log('flowAmountWei (wei):', flowAmountWei.toString());
-
-        // Calculate total value needed (update fee + FLOW for token purchase)
-        const totalValue = flowAmountWei + updateFee; // BigInt addition
-
-        console.log('Total value to send with transaction (wei):', totalValue.toString());
-
-        // Initialize App contract
-        const contract = new ethers.Contract(APP_CONTRACT_ADDRESS, APP_ABI, wallet);
-
-        // Call the contract function
-        try {
-            const tx = await contract.buyTokensFromFlow(contractTokenName, updateDataArray, {
-                value: totalValue
-            });
-
-            console.log('Transaction sent:', tx.hash);
-
-            // Wait for transaction confirmation
-            const receipt = await tx.wait();
-            console.log('Transaction confirmed in block:', receipt.blockNumber);
-
-            return NextResponse.json({
-                success: true,
-                data: {
-                    transactionHash: receipt.hash,
-                    blockNumber: receipt.blockNumber,
-                    gasUsed: receipt.gasUsed.toString(),
-                    tokenName: contractTokenName,
-                    flowAmount: flowAmount
-                }
-            });
-        } catch (txError: any) {
-            console.error('Contract call reverted:', txError);
-            return NextResponse.json({
-                success: false,
-                error: txError.reason || txError.message || 'Transaction reverted',
-                details: txError.code || 'Unknown error'
-            }, { status: 500 });
-        }
+        return NextResponse.json({
+            success: true,
+            data: {
+                to: APP_CONTRACT_ADDRESS,
+                value: totalValue.toString(),
+                data: transactionData,
+            }
+        });
 
     } catch (error: any) {
         console.error('Error in buy-tokens API:', error);
-
         return NextResponse.json({
             success: false,
-            error: error.reason || error.message || 'Transaction failed',
-            details: error.code || 'Unknown error'
+            error: error.reason || error.message || 'Failed to prepare transaction',
         }, { status: 500 });
     }
 }

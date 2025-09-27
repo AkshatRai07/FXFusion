@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ArrowDown, ChevronDown, Loader2 } from 'lucide-react';
+import { ethers } from 'ethers';
 
 interface BuyTokensModalProps {
     isOpen: boolean;
@@ -110,12 +111,12 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
 
         setIsLoading(true);
         setTransactionStatus(null);
+
         try {
+            // 1. Fetch transaction data from your backend
             const response = await fetch('/api/buy-tokens', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tokenSymbol: selectedToken,
                     flowAmount: flowAmount,
@@ -123,20 +124,45 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
             });
 
             const result = await response.json();
-
-            if (result.success) {
-                setTransactionStatus({ success: true, message: `Successfully purchased tokens! Tx: ${result.data.transactionHash.substring(0, 10)}...` });
-                console.log('Transaction successful:', result.data);
-                // Optionally close modal after a delay
-                setTimeout(() => {
-                    handleClose();
-                }, 5000);
-            } else {
-                throw new Error(result.error || 'Transaction failed');
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to prepare transaction.');
             }
+
+            const { to, value, data } = result.data;
+
+            // 2. Use the user's wallet to send the transaction
+            if (!window.ethereum) {
+                throw new Error('Wallet not found. Please install a browser wallet like MetaMask.');
+            }
+
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+
+            const tx = await signer.sendTransaction({
+                to: to,
+                value: value,
+                data: data,
+            });
+
+            setTransactionStatus({ success: false, message: `Transaction sent! Waiting for confirmation... Tx: ${tx.hash.substring(0, 10)}...` });
+
+            // 3. Wait for the transaction to be confirmed
+            const receipt = await tx.wait();
+
+            if (receipt && receipt.status === 1) {
+                setTransactionStatus({ success: true, message: `Successfully purchased tokens! Tx: ${receipt.hash.substring(0, 10)}...` });
+                setTimeout(() => handleClose(), 5000);
+            } else {
+                throw new Error('Transaction failed on-chain.');
+            }
+
         } catch (error: any) {
             console.error('Failed to buy tokens:', error);
-            setTransactionStatus({ success: false, message: error.message || 'An unknown error occurred.' });
+            // Handle common errors like user rejecting the transaction
+            const errorMessage = error.code === 'ACTION_REJECTED'
+                ? 'Transaction rejected by user.'
+                : (error.message || 'An unknown error occurred.');
+            setTransactionStatus({ success: false, message: errorMessage });
         } finally {
             setIsLoading(false);
         }
