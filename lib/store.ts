@@ -26,14 +26,12 @@ interface PriceState {
 export const usePriceStore = create<PriceState>((set) => ({
   prices: {},
   updatePrice: (symbol, data) => {
-    console.log("Store: Updating single price:", symbol, data);
     set((state) => ({
       prices: { ...state.prices, [symbol]: data },
     }));
   },
   updatePrices: (prices) => {
     // This console log will now show the clean, incoming price batches
-    console.log("Store: Updating multiple prices:", prices);
     set((state) => ({
       // Merging with the previous state is still correct for batch updates
       prices: { ...state.prices, ...prices },

@@ -9,15 +9,27 @@ export interface PriceUpdate {
     change24h: number;
 }
 
+interface RawPriceUpdate {
+    id: string;
+    price?: PriceData;
+}
+
+interface PriceData {
+    price: string;
+    conf: string;
+    expo: number;
+    publish_time: number;
+}
+
 const symbolMap: Record<string, string> = {
-    "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43": "BTC/USD",
-    "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace": "ETH/USD",
-    "0x2fb245b9a84554a0f15aa123cbb5f64cd263b59e9a87d80148cbffab50c69f30": "FLOW/USD",
-    "0x0b1e3297e69f162877b577b0d6a47a0d63b2392bc8499e6540da4187a63e28f8": "USD/CHF",
-    "0x0ac0f9a2886fc2dd708bc66cc2cea359052ce89d324f45d95fadbc6c4fcf1809": "USD/INR",
-    "0xef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52": "USD/JPY",
-    "0x84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1": "GBP/USD",
-    "0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b": "EUR/USD",
+    "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43": "BTC/USD",
+    "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace": "ETH/USD",
+    "2fb245b9a84554a0f15aa123cbb5f64cd263b59e9a87d80148cbffab50c69f30": "FLOW/USD",
+    "0b1e3297e69f162877b577b0d6a47a0d63b2392bc8499e6540da4187a63e28f8": "USD/CHF",
+    "0ac0f9a2886fc2dd708bc66cc2cea359052ce89d324f45d95fadbc6c4fcf1809": "USD/INR",
+    "ef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52": "USD/JPY",
+    "84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1": "GBP/USD",
+    "a995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b": "EUR/USD",
 };
 
 const priceIds = Object.keys(symbolMap);
@@ -48,13 +60,12 @@ export async function GET() {
 
                         // Then, check if that object contains the '.parsed' key and that its value is an array.
                         if (priceUpdatePayload.parsed && Array.isArray(priceUpdatePayload.parsed)) {
-
                             // If it does, loop through the array of price updates.
-                            priceUpdatePayload.parsed.forEach((update: any) => {
+                            priceUpdatePayload.parsed.forEach((update: RawPriceUpdate) => {
                                 const symbol = symbolMap[update.id];
                                 if (symbol && update.price?.price) {
                                     const priceValue = parseFloat(update.price.price);
-                                    const expo = parseInt(update.price.expo);
+                                    const expo = update.price.expo;
                                     processedPrices[symbol] = {
                                         symbol,
                                         price: priceValue * Math.pow(10, expo),
@@ -65,7 +76,6 @@ export async function GET() {
                         }
 
                         if (Object.keys(processedPrices).length > 0) {
-                            console.log("📊 API Route: Processed prices:", processedPrices);
                             const data = `data: ${JSON.stringify(processedPrices)}\n\n`;
                             controller.enqueue(new TextEncoder().encode(data));
                         }
