@@ -3,15 +3,17 @@
 import { useWalletStore, useBasketStore } from '@/lib/store';
 import { PriceTicker } from '@/components/ui/price-ticker';
 import { BasketCard } from '@/components/ui/basket-card';
+import { BuyTokensModal } from "@/components/ui/buy-tokens-modal";
 import { Button } from '@/components/ui/button';
-import { Plus, TrendingUp } from 'lucide-react';
+import { Plus, TrendingUp, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function Dashboard() {
   const isConnected = useWalletStore(state => state.isConnected);
   const { userBaskets, publicBaskets } = useBasketStore();
+  const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isConnected) {
@@ -28,8 +30,21 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
-          <p className="text-gray-400">Manage your FX baskets and track performance</p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
+              <p className="text-gray-400">Manage your FX baskets and track performance</p>
+            </div>
+            <div className="mt-4 md:mt-0">
+              <Button
+                onClick={() => setIsBuyModalOpen(true)}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Buy Tokens
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Live Prices */}
@@ -88,6 +103,12 @@ export default function Dashboard() {
           </div>
         </section>
       </div>
+
+      {/* Buy Tokens Modal */}
+      <BuyTokensModal
+        isOpen={isBuyModalOpen}
+        onClose={() => setIsBuyModalOpen(false)}
+      />
     </div>
   );
 }
