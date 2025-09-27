@@ -83,7 +83,7 @@ contract App {
         address _fUSD_Address,
         address _fYEN_Address,
         address _basketNFTAddress,
-        address _lotteryPoolAddress
+        address payable _lotteryPoolAddress
     ) {
         pyth = IPyth(PythAddress);
         basketNFT = BasketJsonNFT(_basketNFTAddress);

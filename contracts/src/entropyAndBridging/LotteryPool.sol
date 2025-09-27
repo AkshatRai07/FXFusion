@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {OApp, Origin} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
-import {MessagingFee, ILayerZeroEndpointV2, SendParam} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Options} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/Options.sol"; // CHANGED: Import Options library
+// CORRECTED IMPORTS
+import { OApp, Origin } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
+import { MessagingFee } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
+import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IApp {
     function sellTokensForFlow(
@@ -16,11 +18,12 @@ interface IApp {
 }
 
 contract LotteryPool is OApp {
-    // State variables, events, and modifiers remain the same...
+    using OptionsBuilder for bytes;
+
     IERC20 public immutable flowToken;
     address public keeper;
     IApp public appContract;
-    uint32 public immutable baseChainId; // This is the LayerZero Endpoint ID (eid)
+    uint32 public immutable baseChainEid; // Renamed for clarity
     bytes32 public immutable rngContractAddress;
     address[] public participants;
     mapping(address => uint256) public participantStakes;
@@ -30,7 +33,7 @@ contract LotteryPool is OApp {
     address public lastWinner;
 
     event WinnerSelected(address indexed winner, uint256 amountWon);
-    event DrawRequested();
+    event DrawRequested(uint32 destinationEid, bytes32 receiver);
     event StakeReceived(address indexed user, uint256 amount);
 
     modifier onlyAppContract() {
@@ -43,24 +46,22 @@ contract LotteryPool is OApp {
         _;
     }
 
-    // Constructor remains the same...
     constructor(
         address _lzEndpoint,
         address _owner,
         address _flowToken,
         address _appContract,
-        uint32 _baseChainId,
+        uint32 _baseChainEid,
         bytes32 _rngContractAddress
-    ) OApp(_lzEndpoint, _owner) {
+    ) OApp(_lzEndpoint, _owner) Ownable(_owner) {
         flowToken = IERC20(_flowToken);
         appContract = IApp(_appContract);
         keeper = _owner;
-        baseChainId = _baseChainId;
+        baseChainEid = _baseChainEid;
         rngContractAddress = _rngContractAddress;
         lastDrawTimestamp = block.timestamp;
     }
 
-    // setKeeper and enterLottery functions remain the same...
     function setKeeper(address _newKeeper) external onlyOwner {
         keeper = _newKeeper;
     }
@@ -83,44 +84,46 @@ contract LotteryPool is OApp {
         emit StakeReceived(_user, flowReceived);
     }
 
-    function requestRandomWinner() external onlyKeeper payable { // CHANGED: Added payable
+
+    // --- CORRECTED FUNCTION ---
+    /**
+     * @notice Called by the keeper to request a random number from the Base contract.
+     * @dev This is a payable function, as the keeper must pay the LayerZero messaging fee.
+     */
+    function requestRandomWinner() external onlyKeeper payable {
         require(block.timestamp >= lastDrawTimestamp + DRAW_INTERVAL, "Draw interval not passed");
         require(participants.length > 0, "No participants in the pool");
 
-        // CHANGED: Use the V2 Options builder
-        // This sets aside 200,000 gas for execution on the destination chain (Base).
-        // Adjust the gas value as needed for your use case.
-        bytes memory options = Options.newOptions().addExecutorLzReceiveOption(200000, 0);
+        // The message payload is empty as we are just triggering the remote contract.
+        bytes memory message = abi.encode("");
+        // Options to airdrop gas on the destination chain (Base) for execution.
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
-        // 1. Assemble the SendParam struct
-        SendParam memory sendParam = SendParam({
-            dstEid: baseChainId,
-            receiver: rngContractAddress,
-            message: abi.encode(""), // No payload needed for the request
-            options: options
-        });
+        // Quote the fee required for the LayerZero message.
+        MessagingFee memory fee = _quote(baseChainEid, message, options, false);
+        require(msg.value >= fee.nativeFee, "LotteryPool: Insufficient fee.");
 
-        // 2. Use the struct to get a quote
-        MessagingFee memory fee = endpoint.quote(sendParam, false); // CHANGED: Second argument must be a boolean
+        // Send the message to the RngSenderBase contract on the Base chain.
+        _lzSend(
+            baseChainEid,
+            message,
+            options,
+            fee,
+            payable(msg.sender) // Refund excess fees to the keeper
+        );
 
-        // 3. Use the struct and the fee to send the message
-        // The keeper must pay the messaging fee via msg.value
-        _lzSend(sendParam, fee, payable(msg.sender)); // CHANGED: Removed {value: ...} as it's handled by the OApp
-
-        emit DrawRequested();
+        emit DrawRequested(baseChainEid, rngContractAddress);
     }
+    // --- END OF CORRECTION ---
 
-    // _lzReceive now correctly checks against the eid and sender address
-    function _lzReceive(
-        Origin calldata _origin,
-        bytes32, /* _guid */
-        bytes calldata _message,
-        address, /* _executor */
-        bytes calldata /* _extraData */
-    ) internal override {
-        // CHANGED: Use `_origin.eid` and compare against your stored `baseChainId`
-        require(_origin.eid == baseChainId && _origin.sender == rngContractAddress, "Unauthorized sender");
+    /**
+     * @notice Receives the random number back from the RngSenderBase contract.
+     */
+    function _lzReceive(Origin calldata _origin, bytes32 /*_guid*/, bytes calldata _message, address /*_executor*/, bytes calldata /*_extraData*/) internal override {
+        // Verify the message comes from the authorized RNG contract on the Base chain.
+        require(_origin.srcEid == baseChainEid && _origin.sender == rngContractAddress, "Unauthorized sender");
         
+        // Decode the random number and select the winner.
         (bytes32 randomNumber) = abi.decode(_message, (bytes32));
         _selectWinner(uint256(randomNumber));
     }
@@ -133,6 +136,7 @@ contract LotteryPool is OApp {
         totalPoolSize = 0;
         lastDrawTimestamp = block.timestamp;
 
+        // Reset stakes and participant list for the next round
         for (uint i = 0; i < participants.length; i++) {
             delete participantStakes[participants[i]];
         }
@@ -140,11 +144,9 @@ contract LotteryPool is OApp {
 
         (bool success, ) = payable(winner).call{value: amountWon}("");
         require(success, "Transfer failed");
-
         emit WinnerSelected(winner, amountWon);
     }
     
-    // withdraw and receive functions remain the same...
     function withdraw(address payable _to) external onlyOwner {
         _to.transfer(address(this).balance);
     }
