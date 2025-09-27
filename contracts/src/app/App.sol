@@ -3,11 +3,11 @@ pragma solidity ^0.8.20;
 
 import {FiatSwap} from "../swaps/FiatSwap.sol";
 import {BasketJsonNFT} from "../nfts/BasketJsonNFT.sol";
+import {LotteryPool} from "../entropyAndBridging/LotteryPool.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
-// Interface to interact with your f-Token contracts (fCHF, fEUR, etc.)
 interface IForeignToken {
     function buyTokens(uint256 rate) external payable;
 
@@ -46,6 +46,7 @@ interface IFiatSwap {
 contract App {
     IPyth pyth;
     BasketJsonNFT public basketNFT;
+    LotteryPool public lotteryPool;
     uint256 public constant SCALE = 1e18;
 
     struct Basket {
@@ -131,10 +132,12 @@ contract App {
         address _fINR_Address,
         address _fUSD_Address,
         address _fYEN_Address,
-        address _basketNFTAddress
+        address _basketNFTAddress,
+        address _lotteryPoolAddress
     ) {
         pyth = IPyth(PythAddress);
         basketNFT = BasketJsonNFT(_basketNFTAddress);
+        lotteryPool = LotteryPool(_lotteryPoolAddress);
 
         fCHF_Address = _fCHF_Address;
         fEUR_Address = _fEUR_Address;
