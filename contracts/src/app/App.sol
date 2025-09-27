@@ -222,9 +222,29 @@ contract App {
         emit TokensSoldForFlow(msg.sender, tokenAddress, tokenAmount, ethAmountToReceive);
     }
 
-    function addLiquidity(string memory _tokenNameA, string memory _tokenNameB, uint256 amountA, uint256 amountB) external {
+    function addLiquidity(
+        string memory _tokenNameA,
+        string memory _tokenNameB,
+        uint256 amountA,
+        bytes[] calldata updateData
+    ) external payable {
+        uint256 fee = pyth.getUpdateFee(updateData);
+        require(msg.value >= fee, "Insufficient fee for Pyth update");
+        pyth.updatePriceFeeds{value: fee}(updateData);
+        if (msg.value > fee) {
+            payable(msg.sender).transfer(msg.value - fee);
+        }
+
         address tokenAddressA = nameToAddress[_tokenNameA];
         address tokenAddressB = nameToAddress[_tokenNameB];
+        require(tokenAddressA != address(0) && tokenAddressB != address(0), "Invalid token name");
+
+        uint256 priceA = getNormalizedPrice(nameToId[_tokenNameA]);
+        uint256 priceB = getNormalizedPrice(nameToId[_tokenNameB]);
+
+        uint256 rateAtoB = (priceA * SCALE) / priceB;
+        uint256 amountB = (amountA * rateAtoB) / SCALE;
+
         address swapContractAddress = swapContracts[getPairKey(tokenAddressA, tokenAddressB)];
         require(swapContractAddress != address(0), "Swap contract for this pair not found");
 
@@ -240,6 +260,7 @@ contract App {
         uint256 mintedLp = lpBalanceAfter - lpBalanceBefore;
 
         require(mintedLp > 0, "No liquidity tokens minted");
+
         IERC20(swapContractAddress).transfer(msg.sender, mintedLp);
 
         emit LiquidityAdded(msg.sender, swapContractAddress, mintedLp);
