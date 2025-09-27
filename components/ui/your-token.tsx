@@ -55,6 +55,7 @@ export function YourTokens() {
                         }
                         const contract = new Contract(token.address, erc20Abi, provider);
                         const bal = await contract.balanceOf(user);
+                        console.log(bal)
                         const balance = parseFloat(formatUnits(bal, 18));
                         return { symbol: token.symbol, balance, eligible: balance > 0 };
                     } catch (err) {

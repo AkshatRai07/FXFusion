@@ -3,20 +3,20 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { ChevronDown, Loader2, Plus } from 'lucide-react';
+import { ChevronDown, Loader2, Plus, Minus, Info } from 'lucide-react';
 import { ethers } from 'ethers';
-import { useWalletStore } from '@/lib/store';
 
-// Mock token data - replace with your actual token fetching logic
+// --- Types and Constants ---
+
 const availableTokens = [
-    { symbol: 'USDC', name: 'USD Coin', address: '0x...' },
-    { symbol: 'INR', name: 'Indian Rupee', address: '0x...' },
-    { symbol: 'EUR', name: 'Euro', address: '0x...' },
-    { symbol: 'GBP', name: 'British Pound', address: '0x...' },
-    { symbol: 'JPY', name: 'Japanese Yen', address: '0x...' },
-    { symbol: 'CHF', name: 'Swiss Franc', address: '0x...' },
+    { symbol: 'fUSD', name: 'Fiat USD' },
+    { symbol: 'fINR', name: 'Fiat INR' },
+    { symbol: 'fEUR', name: 'Fiat EUR' },
+    { symbol: 'fGBP', name: 'Fiat GBP' },
+    { symbol: 'fYEN', name: 'Fiat YEN' },
+    { symbol: 'fCHF', name: 'Fiat CHF' },
 ];
 
 interface LiquidityModalProps {
@@ -24,167 +24,275 @@ interface LiquidityModalProps {
     onClose: () => void;
 }
 
+interface EthereumError extends Error {
+    code?: number | string;
+}
+
+type Mode = 'add' | 'remove';
+
+// --- Component ---
+
 export function LiquidityModal({ isOpen, onClose }: LiquidityModalProps) {
+    const [mode, setMode] = useState<Mode>('add');
+    const [tokenA, setTokenA] = useState('fUSD');
+    const [tokenB, setTokenB] = useState('fINR');
     const [amountA, setAmountA] = useState('');
     const [amountB, setAmountB] = useState('');
-    const [tokenA, setTokenA] = useState('USDC');
-    const [tokenB, setTokenB] = useState('INR');
+    const [lpAmount, setLpAmount] = useState('');
+    const [isCalculating, setIsCalculating] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [transactionStatus, setTransactionStatus] = useState<{ success: boolean; message: string } | null>(null);
-    const { address } = useWalletStore();
 
-    // Mock balances - replace with actual balance fetching
-    const [balances, setBalances] = useState<Record<string, string>>({
-        USDC: '1000.00',
-        INR: '50000.00',
-        EUR: '800.00',
-        GBP: '750.00',
-        JPY: '120000.00',
-        CHF: '900.00',
-    });
+    // --- Effects ---
 
-    const handleAddLiquidity = async (e: React.FormEvent) => {
+    // Effect to calculate amountB when amountA or tokens change
+    useEffect(() => {
+        const calculatePairAmount = async () => {
+            if (mode === 'add' && amountA && parseFloat(amountA) > 0 && tokenA !== tokenB) {
+                setIsCalculating(true);
+                try {
+                    const response = await fetch('/api/calculate-liquidity', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tokenNameA: tokenA, tokenNameB: tokenB, amountA }),
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        setAmountB(result.data.amountB);
+                    } else {
+                        setAmountB('Error fetching rate');
+                    }
+                } catch (error) {
+                    setAmountB('Error');
+                } finally {
+                    setIsCalculating(false);
+                }
+            } else if (mode === 'add') {
+                setAmountB('');
+            }
+        };
+
+        const debounceTimeout = setTimeout(calculatePairAmount, 500); // Debounce to avoid spamming the API
+        return () => clearTimeout(debounceTimeout);
+    }, [amountA, tokenA, tokenB, mode]);
+
+
+    // --- Handlers ---
+
+    const handleModeChange = (newMode: Mode) => {
+        setMode(newMode);
+        setTransactionStatus(null); // Clear status on mode switch
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!amountA || !amountB || !tokenA || !tokenB || !address) return;
-
         setIsLoading(true);
         setTransactionStatus(null);
 
         try {
-            // This is a placeholder. You'll need to implement:
-            // 1. Get the correct FiatSwap contract address for the tokenA/tokenB pair.
-            // 2. Get the ABI for FiatSwap and the ERC20 token.
-            // 3. Create contract instances.
-            // 4. Approve the FiatSwap contract to spend tokenA and tokenB.
-            // 5. Call the `addLiquidity` function on the FiatSwap contract.
+            const endpoint = mode === 'add' ? '/api/add-liquidity' : '/api/remove-liquidity';
+            const body = mode === 'add'
+                ? { tokenNameA: tokenA, tokenNameB: tokenB, amountA }
+                : { tokenNameA: tokenA, tokenNameB: tokenB, lpTokenAmount: lpAmount };
 
-            console.log(`Adding liquidity: ${amountA} ${tokenA} and ${amountB} ${tokenB}`);
+            // 1. Fetch transaction data from the backend
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || `Failed to prepare ${mode} liquidity transaction.`);
+            }
 
-            // Simulate transaction
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            const { to, value, data } = result.data;
 
-            setTransactionStatus({ success: true, message: 'Liquidity added successfully!' });
-            setTimeout(() => handleClose(), 3000);
+            // 2. Use the user's wallet to send the transaction
+            if (!window.ethereum) throw new Error('Wallet not found.');
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const tx = await signer.sendTransaction({ to, value, data });
 
+            setTransactionStatus({ success: false, message: `Transaction sent... Tx: ${tx.hash.substring(0, 10)}...` });
+            const receipt = await tx.wait();
+
+            if (receipt && receipt.status === 1) {
+                setTransactionStatus({ success: true, message: `Liquidity ${mode === 'add' ? 'added' : 'removed'} successfully!` });
+                setTimeout(() => handleClose(), 3000);
+            } else {
+                throw new Error('Transaction failed on-chain.');
+            }
         } catch (error: any) {
-            console.error('Failed to add liquidity:', error);
-            setTransactionStatus({ success: false, message: error.message || 'Failed to add liquidity.' });
+            const errorMessage = error.code === 'ACTION_REJECTED' ? 'Transaction rejected.' : (error.message || 'An unknown error occurred.');
+            setTransactionStatus({ success: false, message: errorMessage });
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleClose = () => {
-        if (!isLoading) {
-            setAmountA('');
-            setAmountB('');
-            setTransactionStatus(null);
-            onClose();
-        }
+        if (isLoading) return;
+        setAmountA('');
+        setAmountB('');
+        setLpAmount('');
+        setTransactionStatus(null);
+        onClose();
     };
 
-    const balanceA = balances[tokenA] ?? '0';
-    const balanceB = balances[tokenB] ?? '0';
+    // --- Render Logic ---
+
+    const isAddButtonDisabled = !amountA || !amountB || isCalculating || isLoading || tokenA === tokenB;
+    const isRemoveButtonDisabled = !lpAmount || parseFloat(lpAmount) <= 0 || isLoading || tokenA === tokenB;
 
     return (
         <Dialog open={isOpen} onOpenChange={handleClose}>
             <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-md p-6 rounded-2xl">
-                <div className="space-y-4">
-                    <h2 className="text-xl font-bold text-center">Add Liquidity</h2>
-                    <p className="text-sm text-gray-400 text-center">Provide two tokens to earn fees.</p>
-
-                    {/* Token A Input */}
-                    <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                        <div className="flex justify-between items-center mb-2">
-                            <Input
-                                type="number"
-                                value={amountA}
-                                onChange={(e) => setAmountA(e.target.value)}
-                                placeholder="0.0"
-                                className="bg-transparent border-none text-2xl font-semibold text-white p-0 h-auto focus:ring-0 flex-1"
-                                disabled={isLoading}
-                            />
-                            <Select value={tokenA} onValueChange={setTokenA} disabled={isLoading}>
-                                <SelectTrigger className="bg-gray-700 border-none rounded-full px-3 py-2 w-auto ml-4 [&>svg]:hidden">
-                                    <div className="flex items-center">
-                                        <span className="text-white font-medium mr-1">{tokenA}</span>
-                                        <ChevronDown className="h-4 w-4 text-gray-400" />
-                                    </div>
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-800 border-gray-700">
-                                    {availableTokens.map((token) => (
-                                        <SelectItem key={token.symbol} value={token.symbol} className="text-white hover:bg-gray-700">
-                                            {token.symbol}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="text-gray-400 text-sm mt-1">
-                            Balance: {balanceA}
-                        </div>
-                    </div>
-
-                    <div className="flex justify-center">
-                        <Plus className="h-6 w-6 text-gray-500" />
-                    </div>
-
-                    {/* Token B Input */}
-                    <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                        <div className="flex justify-between items-center mb-2">
-                            <Input
-                                type="number"
-                                value={amountB}
-                                onChange={(e) => setAmountB(e.target.value)}
-                                placeholder="0.0"
-                                className="bg-transparent border-none text-2xl font-semibold text-white p-0 h-auto focus:ring-0 flex-1"
-                                disabled={isLoading}
-                            />
-                            <Select value={tokenB} onValueChange={setTokenB} disabled={isLoading}>
-                                <SelectTrigger className="bg-gray-700 border-none rounded-full px-3 py-2 w-auto ml-4 [&>svg]:hidden">
-                                    <div className="flex items-center">
-                                        <span className="text-white font-medium mr-1">{tokenB}</span>
-                                        <ChevronDown className="h-4 w-4 text-gray-400" />
-                                    </div>
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-800 border-gray-700">
-                                    {availableTokens.map((token) => (
-                                        <SelectItem key={token.symbol} value={token.symbol} className="text-white hover:bg-gray-700">
-                                            {token.symbol}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="text-gray-400 text-sm mt-1">
-                            Balance: {balanceB}
-                        </div>
-                    </div>
-
-                    {/* Transaction Status */}
-                    {transactionStatus && (
-                        <div className={`rounded-lg p-3 text-center text-sm ${transactionStatus.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                            {transactionStatus.message}
-                        </div>
-                    )}
-
-                    {/* Submit Button */}
-                    <Button
-                        onClick={handleAddLiquidity}
-                        disabled={!amountA || !amountB || isLoading}
-                        className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white py-4 rounded-xl text-lg font-semibold"
-                    >
-                        {isLoading ? (
-                            <>
-                                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                                Processing...
-                            </>
-                        ) : (
-                            'Add Liquidity'
-                        )}
-                    </Button>
+                <div className="flex justify-center bg-gray-800 p-1 rounded-full border border-gray-700">
+                    <Button onClick={() => handleModeChange('add')} variant="ghost" className={`w-1/2 rounded-full ${mode === 'add' ? 'bg-indigo-600' : 'hover:bg-gray-700'}`}>Add</Button>
+                    <Button onClick={() => handleModeChange('remove')} variant="ghost" className={`w-1/2 rounded-full ${mode === 'remove' ? 'bg-indigo-600' : 'hover:bg-gray-700'}`}>Remove</Button>
                 </div>
+
+                {/* --- ADD LIQUIDITY VIEW --- */}
+                {mode === 'add' && (
+                    <div className="space-y-4 pt-4">
+                        <TokenInput
+                            label="You Deposit"
+                            amount={amountA}
+                            onAmountChange={setAmountA}
+                            selectedToken={tokenA}
+                            onTokenChange={setTokenA}
+                            disabled={isLoading}
+                        />
+                        <div className="flex justify-center"><Plus className="h-6 w-6 text-gray-500" /></div>
+                        <TokenInput
+                            label="You Deposit"
+                            amount={amountB}
+                            onAmountChange={() => {}}
+                            selectedToken={tokenB}
+                            onTokenChange={setTokenB}
+                            disabled={isLoading}
+                            readOnly={true}
+                            isCalculating={isCalculating}
+                        />
+                         <div className="bg-blue-900/30 text-blue-300 text-xs p-3 rounded-lg flex items-start space-x-2">
+                            <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                            <span>You only need to input the first amount. The second is calculated based on live prices to ensure a fair ratio.</span>
+                        </div>
+                        <Button onClick={handleSubmit} disabled={isAddButtonDisabled} className="w-full ...">
+                            {isLoading ? <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Processing...</> : 'Add Liquidity'}
+                        </Button>
+                    </div>
+                )}
+
+                {/* --- REMOVE LIQUIDITY VIEW --- */}
+                {mode === 'remove' && (
+                    <div className="space-y-4 pt-4">
+                         <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-300">Select Pool Tokens</p>
+                            <div className="grid grid-cols-2 gap-4">
+                               <TokenSelector selectedToken={tokenA} onTokenChange={setTokenA} disabled={isLoading}/>
+                               <TokenSelector selectedToken={tokenB} onTokenChange={setTokenB} disabled={isLoading}/>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                           <label className="text-sm text-gray-400">LP Token Amount</label>
+                           <Input
+                                type="number"
+                                value={lpAmount}
+                                onChange={(e) => setLpAmount(e.target.value)}
+                                placeholder="0.0"
+                                className="bg-transparent ... text-2xl"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div className="flex justify-center"><Minus className="h-6 w-6 text-gray-500" /></div>
+
+                        <p className="text-center text-gray-300">You will receive both {tokenA} and {tokenB}.</p>
+
+                        <Button onClick={handleSubmit} disabled={isRemoveButtonDisabled} className="w-full ...">
+                            {isLoading ? <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Processing...</> : 'Remove Liquidity'}
+                        </Button>
+                    </div>
+                )}
+
+                {/* --- Transaction Status --- */}
+                {transactionStatus && (
+                    <div className={`rounded-lg p-3 mt-4 text-center text-sm ${transactionStatus.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                        {transactionStatus.message}
+                    </div>
+                )}
             </DialogContent>
         </Dialog>
+    );
+}
+
+
+// --- Helper Sub-components ---
+
+interface TokenInputProps {
+    label: string;
+    amount: string;
+    onAmountChange: (value: string) => void;
+    selectedToken: string;
+    onTokenChange: (token: string) => void;
+    disabled: boolean;
+    readOnly?: boolean;
+    isCalculating?: boolean;
+}
+
+function TokenInput({ amount, onAmountChange, selectedToken, onTokenChange, disabled, readOnly, isCalculating }: TokenInputProps) {
+    return (
+        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <div className="flex justify-between items-center mb-2">
+                <div className='flex-1 pr-2'>
+                    {readOnly ? (
+                        <div className="text-2xl font-semibold text-white h-9 flex items-center">
+                            {isCalculating ? <Loader2 className="h-5 w-5 animate-spin"/> : amount || '0.0'}
+                        </div>
+                    ) : (
+                         <Input
+                            type="number"
+                            value={amount}
+                            onChange={(e) => onAmountChange(e.target.value)}
+                            placeholder="0.0"
+                            className="bg-transparent border-none text-2xl font-semibold text-white p-0 h-auto focus:ring-0"
+                            disabled={disabled}
+                        />
+                    )}
+                </div>
+                <TokenSelector selectedToken={selectedToken} onTokenChange={onTokenChange} disabled={disabled} />
+            </div>
+        </div>
+    );
+}
+
+interface TokenSelectorProps {
+    selectedToken: string;
+    onTokenChange: (token: string) => void;
+    disabled: boolean;
+}
+
+function TokenSelector({ selectedToken, onTokenChange, disabled }: TokenSelectorProps) {
+    return (
+        <Select value={selectedToken} onValueChange={onTokenChange} disabled={disabled}>
+            <SelectTrigger className="bg-gray-700 border-none rounded-full px-3 py-2 w-auto min-w-[110px] [&>svg]:hidden">
+                 <SelectValue placeholder="Select">
+                    <div className="flex items-center">
+                        <span className="text-white font-medium mr-1">{selectedToken}</span>
+                        <ChevronDown className="h-4 w-4 text-gray-400" />
+                    </div>
+                 </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="bg-gray-800 border-gray-700">
+                {availableTokens.map((token) => (
+                    <SelectItem key={token.symbol} value={token.symbol} className="text-white hover:bg-gray-700">
+                        {token.symbol}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
     );
 }

@@ -170,15 +170,13 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
             const provider = new ethers.BrowserProvider(window.ethereum);
             const signer = await provider.getSigner();
 
-            console.log(provider, signer)
+            console.log(value)
 
             const tx = await signer.sendTransaction({
                 to: to,
                 value: value,
                 data: data,
             });
-
-            console.log(tx)
 
             setTransactionStatus({ success: false, message: `Transaction sent! Waiting for confirmation... Tx: ${tx.hash.substring(0, 10)}...` });
 
