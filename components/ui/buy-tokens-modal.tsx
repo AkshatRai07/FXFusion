@@ -24,6 +24,11 @@ interface PriceData {
     error?: string;
 }
 
+interface EthereumError extends Error {
+  code?: number;
+  data?: unknown;
+}
+
 export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
     const [flowAmount, setFlowAmount] = useState('');
     const [selectedToken, setSelectedToken] = useState('USDC');
@@ -135,14 +140,45 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
                 throw new Error('Wallet not found. Please install a browser wallet like MetaMask.');
             }
 
+            try {
+                await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: "0x221" }],
+                });
+            } catch (error) {
+                const switchError = error as EthereumError;
+                if (switchError.code === 4902) {
+                await window.ethereum.request({
+                    method: "wallet_addEthereumChain",
+                    params: [{
+                    chainId: "0x221",
+                    chainName: "Flow EVM Testnet",
+                    nativeCurrency: {
+                        name: "Flow Testnet",
+                        symbol: "FLOWT",
+                        decimals: 18,
+                    },
+                    rpcUrls: ["https://testnet.evm.nodes.onflow.org"],
+                    blockExplorerUrls: ["https://evm-testnet.flowscan.io"],
+                    }],
+                });
+                } else {
+                    throw switchError;
+                }
+            }
+
             const provider = new ethers.BrowserProvider(window.ethereum);
             const signer = await provider.getSigner();
+
+            console.log(provider, signer)
 
             const tx = await signer.sendTransaction({
                 to: to,
                 value: value,
                 data: data,
             });
+
+            console.log(tx)
 
             setTransactionStatus({ success: false, message: `Transaction sent! Waiting for confirmation... Tx: ${tx.hash.substring(0, 10)}...` });
 
