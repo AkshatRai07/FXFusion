@@ -3,7 +3,8 @@
 import { useWalletStore, useBasketStore } from '@/lib/store';
 import { PriceTicker } from '@/components/ui/price-ticker';
 import { BasketCard } from '@/components/ui/basket-card';
-import { BuyTokensModal } from "@/components/ui/buy-tokens-modal";
+import { BuyTokensModal } from '@/components/ui/buy-tokens-modal';
+import { YourTokens } from '@/components/ui/your-token';
 import { Button } from '@/components/ui/button';
 import { Plus, TrendingUp, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
@@ -49,6 +50,11 @@ export default function Dashboard() {
 
         {/* Live Prices */}
         <PriceTicker className="mb-8" />
+
+        {/* Your Tokens Section */}
+        <section className="mb-12">
+          <YourTokens />
+        </section>
 
         {/* User Baskets Section */}
         <section className="mb-12">
