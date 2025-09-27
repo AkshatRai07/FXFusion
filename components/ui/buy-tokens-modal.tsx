@@ -30,6 +30,7 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [priceData, setPriceData] = useState<PriceData | null>(null);
     const [isLoadingPrices, setIsLoadingPrices] = useState(false);
+    const [transactionStatus, setTransactionStatus] = useState<{ success: boolean; message: string } | null>(null);
 
     const availableTokens = [
         { symbol: 'USDC', name: 'USD Coin' },
@@ -108,15 +109,34 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
         if (!flowAmount || !selectedToken) return;
 
         setIsLoading(true);
+        setTransactionStatus(null);
         try {
-            // Simulate transaction processing
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            setFlowAmount('');
-            setReceivedAmount('');
-            onClose();
-            console.log(`Purchased ${selectedToken} tokens with ${flowAmount} FLOW`);
-        } catch (error) {
+            const response = await fetch('/api/buy-tokens', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tokenSymbol: selectedToken,
+                    flowAmount: flowAmount,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                setTransactionStatus({ success: true, message: `Successfully purchased tokens! Tx: ${result.data.transactionHash.substring(0, 10)}...` });
+                console.log('Transaction successful:', result.data);
+                // Optionally close modal after a delay
+                setTimeout(() => {
+                    handleClose();
+                }, 5000);
+            } else {
+                throw new Error(result.error || 'Transaction failed');
+            }
+        } catch (error: any) {
             console.error('Failed to buy tokens:', error);
+            setTransactionStatus({ success: false, message: error.message || 'An unknown error occurred.' });
         } finally {
             setIsLoading(false);
         }
@@ -126,6 +146,7 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
         if (!isLoading) {
             setFlowAmount('');
             setReceivedAmount('');
+            setTransactionStatus(null);
             onClose();
         }
     };
@@ -234,6 +255,13 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
                     {flowAmount && currentRate && (
                         <div className="text-center text-gray-400 text-sm">
                             1 FLOW = {currentRate.toFixed(4)} {selectedToken}
+                        </div>
+                    )}
+
+                    {/* Transaction Status */}
+                    {transactionStatus && (
+                        <div className={`rounded-lg p-3 text-center text-sm ${transactionStatus.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                            {transactionStatus.message}
                         </div>
                     )}
 
