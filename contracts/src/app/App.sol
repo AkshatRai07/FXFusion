@@ -1,13 +1,31 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { PythStructs } from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import { FiatSwap } from "../swaps/FiatSwap.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 // Interface to interact with your f-Token contracts (fCHF, fEUR, etc.)
 interface IForeignToken {
     function buyTokens(uint256 rate) external payable;
     function sellTokens(uint256 tokenAmount, uint256 rate) external;
+}
+
+interface IFiatSwap {
+    function tokenA() external view returns (address);
+    function tokenB() external view returns (address);
+
+    function addLiquidity(uint256 amountA, uint256 amountB) external;
+    function removeLiquidity(uint256 lpTokenAmount) external;
+
+    function swapAtoB(uint256 amountA, uint256 rateAtoB) external;
+    function swapBtoA(uint256 amountB, uint256 rateBtoA) external;
+
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 }
 
 contract App {
@@ -72,7 +90,23 @@ contract App {
         nameToId["fUSD"] = USDC_USD;
         nameToId["fYEN"] = USD_YEN;
 
-        swapContracts[tokenA < tokenB ? keccak256(abi.encodePacked(tokenA, tokenB)) : keccak256(abi.encodePacked(tokenB, tokenA))] = address(0);
+        address[6] memory tokens = [
+            _fCHF_Address,
+            _fEUR_Address,
+            _fGBP_Address,
+            _fINR_Address,
+            _fUSD_Address,
+            _fYEN_Address
+        ];
+
+        // Deploy FiatSwap contracts for every pair
+        for (uint256 i = 0; i < tokens.length; i++) {
+            for (uint256 j = i + 1; j < tokens.length; j++) {
+                bytes32 pairKey = getPairKey(tokens[i], tokens[j]);
+                FiatSwap swap = new FiatSwap(tokens[i], tokens[j]); // deploy new swap
+                swapContracts[pairKey] = address(swap);
+            }
+        }
     }
 
     function updatePrice(bytes[] calldata updateData) public payable {
@@ -108,6 +142,10 @@ contract App {
         }
     }
 
+    function getPairKey(address tokenA, address tokenB) internal pure returns (bytes32) {
+        return tokenA < tokenB ? keccak256(abi.encodePacked(tokenA, tokenB)) : keccak256(abi.encodePacked(tokenB, tokenA));
+    }
+
     function buyTokensFromFlow(string memory _tokenName, bytes[] calldata updateData) public payable {
         string memory tokenName = _tokenName;
 
@@ -128,6 +166,8 @@ contract App {
         uint256 flowPerTokenRate = (flowPriceInUsd * 10**DECIMALS) / tokenPriceInUsd;
 
         IForeignToken(tokenAddress).buyTokens{value: ethForPurchase}(flowPerTokenRate);
+
+        uint256 tokenAmountReceived = ethForPurchase * flowPerTokenRate;
         emit TokensBoughtWithFlow(msg.sender, tokenAddress, ethForPurchase, tokenAmountReceived);
     }
 
@@ -154,11 +194,12 @@ contract App {
         IERC20(tokenAddress).transferFrom(msg.sender, address(this), tokenAmount);
         IForeignToken(tokenAddress).sellTokens(tokenAmount, flowPerTokenRate);
 
-        payable(msg.sender).call{value : ethAmountToReceive}("");
+        (bool success, ) = payable(msg.sender).call{value : ethAmountToReceive}("");
+        require(success, "Transaction unsuccessful");
         emit TokensSoldForFlow(msg.sender, tokenAddress, tokenAmount, ethAmountToReceive);
     }
 
-    function addLiquidity(string calldata _tokenNameA, string calldata _tokenNameB, uint256 amountA, uint256 amountB) external {
+    function addLiquidity(string memory _tokenNameA, string memory _tokenNameB, uint256 amountA, uint256 amountB) external {
         address tokenAddressA = nameToAddress[_tokenNameA];
         address tokenAddressB = nameToAddress[_tokenNameB];
         address swapContractAddress = swapContracts[getPairKey(tokenAddressA, tokenAddressB)];
@@ -181,7 +222,7 @@ contract App {
         emit LiquidityAdded(msg.sender, swapContractAddress, mintedLp);
     }
 
-    function removeLiquidity(string calldata _tokenNameA, string calldata _tokenNameB, uint256 lpTokenAmount) external {
+    function removeLiquidity(string memory _tokenNameA, string memory _tokenNameB, uint256 lpTokenAmount) external {
         address tokenAddressA = nameToAddress[_tokenNameA];
         address tokenAddressB = nameToAddress[_tokenNameB];
         address swapContractAddress = swapContracts[getPairKey(tokenAddressA, tokenAddressB)];
