@@ -3,15 +3,22 @@
 import { useWalletStore, useBasketStore } from '@/lib/store';
 import { PriceTicker } from '@/components/ui/price-ticker';
 import { BasketCard } from '@/components/ui/basket-card';
+import { BuyTokensModal } from '@/components/ui/buy-tokens-modal';
+import { YourTokens } from '@/components/ui/your-token';
 import { Button } from '@/components/ui/button';
-import { Plus, TrendingUp } from 'lucide-react';
+import { Plus, TrendingUp, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { LiquidityModal } from '@/components/ui/liquidity-modal';
+import { UserBaskets } from '@/components/ui/user-baskets';
+
 
 export default function Dashboard() {
   const isConnected = useWalletStore(state => state.isConnected);
-  const { userBaskets, publicBaskets } = useBasketStore();
+  const { userBaskets } = useBasketStore();
+  const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isConnected) {
@@ -28,12 +35,37 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
-          <p className="text-gray-400">Manage your FX baskets and track performance</p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
+              <p className="text-gray-400">Manage your FX baskets and track performance</p>
+            </div>
+            <div className="mt-4 md:mt-0 flex items-center gap-4">
+              <Button
+                onClick={() => setIsBuyModalOpen(true)}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Buy Tokens
+              </Button>
+              <Button
+                onClick={() => setIsLiquidityModalOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Manage Liquidity
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Live Prices */}
         <PriceTicker className="mb-8" />
+
+        {/* Your Tokens Section */}
+        <section className="mb-12">
+          <YourTokens />
+        </section>
 
         {/* User Baskets Section */}
         <section className="mb-12">
@@ -71,23 +103,18 @@ export default function Dashboard() {
         </section>
 
         {/* Public Baskets Section */}
-        <section>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-white">Popular Baskets</h2>
-            <Link href="/baskets">
-              <Button variant="outline" className="border-slate-700 text-gray-300 hover:text-white hover:bg-slate-800">
-                View All
-              </Button>
-            </Link>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {publicBaskets.slice(0, 6).map((basket) => (
-              <BasketCard key={basket.id} basket={basket} />
-            ))}
-          </div>
-        </section>
       </div>
+
+      {/* Buy Tokens Modal */}
+      <BuyTokensModal
+        isOpen={isBuyModalOpen}
+        onClose={() => setIsBuyModalOpen(false)}
+      />
+      <LiquidityModal
+        isOpen={isLiquidityModalOpen}
+        onClose={() => setIsLiquidityModalOpen(false)}
+      />
     </div>
   );
 }

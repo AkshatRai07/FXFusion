@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 import * as RechartsPrimitive from 'recharts';
+import { TooltipProps, LegendProps } from 'recharts';
+import { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 import { cn } from '@/lib/utils';
 
@@ -20,6 +22,46 @@ export type ChartConfig = {
 
 type ChartContextProps = {
   config: ChartConfig;
+};
+
+interface ChartTooltipPayloadItem {
+  name: string;
+  value: string | number;
+  color: string;
+  dataKey: string;
+  payload: Record<string, any>; // This is the original data object for the point
+}
+
+// Create a props type that includes the props Recharts passes to a custom tooltip
+type ChartTooltipContentProps = React.ComponentProps<'div'> & {
+  active?: boolean;
+  payload?: ChartTooltipPayloadItem[];
+  label?: string | number;
+  hideLabel?: boolean;
+  hideIndicator?: boolean;
+  indicator?: 'line' | 'dot' | 'dashed';
+  nameKey?: string;
+  labelKey?: string;
+  formatter?: (value: any, name: any, item: any, index: any, payload: any) => React.ReactNode;
+  labelFormatter?: (label: any, payload: any[]) => React.ReactNode;
+  color?: string;
+  labelClassName?: string;
+};
+
+interface ChartLegendPayloadItem {
+  value: string;
+  color: string;
+  dataKey?: string;
+  // Recharts payload can be inconsistent, so we allow for other properties
+  [key: string]: any;
+}
+
+// Create a props type for the legend content component
+type ChartLegendContentProps = React.ComponentProps<'div'> & {
+  payload?: ChartLegendPayloadItem[];
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  hideIcon?: boolean;
+  nameKey?: string;
 };
 
 const ChartContext = React.createContext<ChartContextProps | null>(null);
@@ -65,6 +107,7 @@ const ChartContainer = React.forwardRef<
     </ChartContext.Provider>
   );
 });
+
 ChartContainer.displayName = 'Chart';
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
@@ -104,14 +147,7 @@ const ChartTooltip = RechartsPrimitive.Tooltip;
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-    React.ComponentProps<'div'> & {
-      hideLabel?: boolean;
-      hideIndicator?: boolean;
-      indicator?: 'line' | 'dot' | 'dashed';
-      nameKey?: string;
-      labelKey?: string;
-    }
+  ChartTooltipContentProps
 >(
   (
     {
@@ -260,11 +296,7 @@ const ChartLegend = RechartsPrimitive.Legend;
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<'div'> &
-    Pick<RechartsPrimitive.LegendProps, 'payload' | 'verticalAlign'> & {
-      hideIcon?: boolean;
-      nameKey?: string;
-    }
+  ChartLegendContentProps
 >(
   (
     { className, hideIcon = false, payload, verticalAlign = 'bottom', nameKey },

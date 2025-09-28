@@ -1,0 +1,21 @@
+{
+  "name": "contracts",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@layerzerolabs/lz-evm-oapp-v2": "^3.0.135",
+    "@pythnetwork/entropy-sdk-solidity": "^2.0.0",
+    "@pythnetwork/pyth-sdk-solidity": "^4.2.0"
+  }
+}

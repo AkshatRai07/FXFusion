@@ -1,3 +1,5 @@
+// lib/types.ts
+
 export interface Basket {
   id: string;
   name: string;
@@ -24,7 +26,7 @@ export interface PriceData {
   symbol: string;
   price: number;
   change24h: number;
-  lastUpdated: Date;
+  // lastUpdated: Date; // REMOVED
 }
 
 export interface UserBalance {

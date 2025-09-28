@@ -1,0 +1,4 @@
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity
+@pythnetwork/entropy-sdk-solidity/=node_modules/@pythnetwork/entropy-sdk-solidity
+@layerzerolabs/=node_modules/@layerzerolabs

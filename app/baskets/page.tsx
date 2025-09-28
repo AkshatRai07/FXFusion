@@ -26,7 +26,7 @@ export default function Baskets() {
   }
 
   const filteredBaskets = publicBaskets
-    .filter(basket => 
+    .filter(basket =>
       basket.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       basket.description.toLowerCase().includes(searchTerm.toLowerCase())
     )
@@ -100,7 +100,7 @@ export default function Baskets() {
               >
                 Newest
               </Button>
-              
+
               {/* Sort Direction */}
               <Button
                 variant="outline"
