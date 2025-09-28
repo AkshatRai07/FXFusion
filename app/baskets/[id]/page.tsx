@@ -15,7 +15,7 @@ interface BasketDetailPageProps {
 
 export default function BasketDetailPage({ params }: BasketDetailPageProps) {
   const isConnected = useWalletStore(state => state.isConnected);
-  const { publicBaskets, userBaskets } = useBasketStore();
+  const { userBaskets } = useBasketStore();
 
   useEffect(() => {
     if (!isConnected) {
@@ -27,7 +27,7 @@ export default function BasketDetailPage({ params }: BasketDetailPageProps) {
     return null;
   }
 
-  const basket = [...publicBaskets, ...userBaskets].find(b => b.id === params.id);
+  const basket = [...userBaskets].find(b => b.id === params.id);
 
   if (!basket) {
     notFound();

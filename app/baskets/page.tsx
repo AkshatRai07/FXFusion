@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 
 export default function Baskets() {
   const isConnected = useWalletStore(state => state.isConnected);
-  const { publicBaskets } = useBasketStore();
+  const { userBaskets } = useBasketStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'performance' | 'value' | 'created'>('performance');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -25,7 +25,7 @@ export default function Baskets() {
     return null;
   }
 
-  const filteredBaskets = publicBaskets
+  const filteredBaskets = userBaskets
     .filter(basket =>
       basket.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       basket.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -117,7 +117,7 @@ export default function Baskets() {
         {/* Results */}
         <div className="mb-4">
           <p className="text-gray-400">
-            Showing {filteredBaskets.length} of {publicBaskets.length} baskets
+            Showing {filteredBaskets.length} of {userBaskets.length} baskets
           </p>
         </div>
 
