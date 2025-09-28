@@ -4,7 +4,7 @@ import contractJson from "@/contracts/out/App.sol/App.json";
 
 // --- Configuration ---
 const APP_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_App || "";
-const RPC_URL = process.env.RPC_URL || "https://testnet.evm.nodes.onflow.org";
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://testnet.evm.nodes.onflow.org";
 
 const appContract = new ethers.Contract(APP_CONTRACT_ADDRESS, contractJson.abi, new ethers.JsonRpcProvider(RPC_URL));
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         const priceB = await appContract.getNormalizedPrice(await appContract.nameToId(tokenNameB));
 
         if (priceA === 0n || priceB === 0n) {
-             return NextResponse.json({ success: false, error: 'Could not fetch valid prices for pair' }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Could not fetch valid prices for pair' }, { status: 500 });
         }
 
         const rateAtoB = (priceB * SCALE) / priceA;
