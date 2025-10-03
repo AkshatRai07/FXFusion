@@ -10,15 +10,12 @@ import { Plus, TrendingUp, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LiquidityModal } from '@/components/ui/liquidity-modal';
-import { UserBaskets } from '@/components/ui/user-baskets';
 
 
 export default function Dashboard() {
   const isConnected = useWalletStore(state => state.isConnected);
   const { userBaskets } = useBasketStore();
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
-  const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isConnected) {
@@ -46,14 +43,7 @@ export default function Dashboard() {
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
                 <ShoppingCart className="w-4 h-4 mr-2" />
-                Buy Tokens
-              </Button>
-              <Button
-                onClick={() => setIsLiquidityModalOpen(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Manage Liquidity
+                Buy/Sell Tokens
               </Button>
             </div>
           </div>
@@ -110,10 +100,6 @@ export default function Dashboard() {
       <BuyTokensModal
         isOpen={isBuyModalOpen}
         onClose={() => setIsBuyModalOpen(false)}
-      />
-      <LiquidityModal
-        isOpen={isLiquidityModalOpen}
-        onClose={() => setIsLiquidityModalOpen(false)}
       />
     </div>
   );

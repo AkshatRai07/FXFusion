@@ -2,13 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 import { PriceTicker } from '@/components/ui/price-ticker';
-import { BasketCard } from '@/components/ui/basket-card';
-import { useBasketStore, useWalletStore } from '@/lib/store';
-import { TrendingUp, Shield, Zap, ChartBar as BarChart3, DollarSign, Globe } from 'lucide-react';
+import { useWalletStore } from '@/lib/store';
+import { Shield, Zap, ChartBar as BarChart3, DollarSign } from 'lucide-react';
 
 export function LandingPage() {
   const { connect } = useWalletStore();
-  //  const { publicBaskets } = useBasketStore();
 
   const features = [
     {

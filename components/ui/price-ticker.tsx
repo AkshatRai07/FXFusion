@@ -5,19 +5,6 @@ import { usePriceStore } from '@/lib/store';
 import { PriceData } from '@/lib/types';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
-// CSS for the visual flash effect when a price updates
-// const styles = `
-//   .price-card-flash {
-//     animation: flash 0.7s ease-out;
-//   }
-
-//   @keyframes flash {
-//     0% { background-color: #4A5568; } /* A highlight color */
-//     100% { background-color: #2D3748; } /* Your default card background color */
-//   }
-// `;
-
-// This interface matches the data structure sent by our new API route
 interface ApiPriceData {
   symbol: string;
   price: number;
@@ -37,6 +24,9 @@ export function PriceTicker({
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(Date.now());
   const [priceChanges, setPriceChanges] = useState<Record<string, boolean>>({});
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     console.log("PriceTicker: Connecting to backend price stream at /api/prices...");
@@ -74,8 +64,6 @@ export function PriceTicker({
       }
     };
 
-    // CHANGED: Removed eventSource.close() from the error handler.
-    // This allows the browser's EventSource to automatically attempt reconnection.
     eventSource.onerror = (error) => {
       console.error("PriceTicker: Error with backend stream connection. The browser will attempt to reconnect.", error);
       setIsConnected(false);
@@ -164,8 +152,12 @@ export function PriceTicker({
           })}
         </div>
         <div className="mt-4 text-xs text-gray-500">
-          Last data received: {new Date(lastUpdate).toLocaleTimeString()}
-          {' | '}
+          {mounted && (
+            <>
+              Last data received: {new Date(lastUpdate).toLocaleTimeString()}
+              {" | "}
+            </>
+          )}
           Prices in store: {Object.keys(prices).length}
         </div>
       </div>
