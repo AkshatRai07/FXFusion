@@ -5,6 +5,7 @@ import {FiatSwap} from "../swaps/FiatSwap.sol";
 import {BasketJsonNFT} from "../nfts/BasketJsonNFT.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 interface IForeignToken {
@@ -21,10 +22,11 @@ interface IFiatSwap {
     function setCreatorAddress(address _creatorAddress) external;
 }
 
-contract App {
+contract App is Ownable {
     IPyth pyth;
     BasketJsonNFT public basketNFT;
     uint256 public constant SCALE = 1e18;
+    uint256 public constant DECIMALS = 18;
 
     struct Basket {
         address owner;
@@ -33,8 +35,6 @@ contract App {
         string[] outputTokens;
         uint256[] outputAmounts;
     }
-
-    mapping(uint256 => Basket) public nftBaskets;
 
     address public constant PythAddress = 0x2880aB155794e7179c9eE2e38200202908C17B43;
     bytes32 public constant FLOW_USD = 0x2fb245b9a84554a0f15aa123cbb5f64cd263b59e9a87d80148cbffab50c69f30;
@@ -56,6 +56,9 @@ contract App {
     mapping(string => address) public nameToAddress;
     mapping(address => string) public addressToName;
     mapping(bytes32 => address) public swapContracts;
+    mapping(uint256 => Basket) public nftBaskets;
+    mapping(address => uint256[]) public userNFTs;
+    mapping(uint256 => uint256) public nftIndex;
 
     event TokensBoughtWithFlow(
         address indexed user,
@@ -63,36 +66,26 @@ contract App {
         uint256 flowAmount,
         uint256 tokenAmount
     );
+
     event TokensSoldForFlow(
         address indexed user,
         address indexed token,
         uint256 tokenAmount,
         uint256 flowAmount
     );
-    event LiquidityAdded(
-        address indexed user,
-        address indexed swapContract,
-        uint256 lpTokensMinted
-    );
-    event LiquidityRemoved(
-        address indexed user,
-        address indexed swapContract,
-        uint256 amountAReturned,
-        uint256 amountBReturned
-    );
+    
     event BasketCreated(
         address indexed user,
         uint256 indexed nftId,
         string[] tokens,
         uint256[] amounts
     );
+
     event BasketRedeemed(
         address indexed user,
         uint256 indexed nftId,
         uint256 amountRedeemed
     );
-
-    uint256 public constant DECIMALS = 18;
 
     constructor(
         address _fCHF_Address,
@@ -102,7 +95,7 @@ contract App {
         address _fUSD_Address,
         address _fYEN_Address,
         address _basketNFTAddress
-    ) {
+    ) Ownable(msg.sender) {
         pyth = IPyth(PythAddress);
         basketNFT = BasketJsonNFT(_basketNFTAddress);
 
@@ -213,10 +206,7 @@ contract App {
         string memory tokenName = _tokenName;
 
         uint256 fee = pyth.getUpdateFee(updateData);
-        require(
-            msg.value > fee,
-            "Insufficient ETH: Must cover Pyth fee and token cost"
-        );
+        require(msg.value > fee, "Insufficient ETH: Must cover Pyth fee and token cost");
 
         pyth.updatePriceFeeds{value: fee}(updateData);
 
@@ -231,12 +221,9 @@ contract App {
         uint256 flowPriceInUsd = getNormalizedPrice(FLOW_USD);
         uint256 tokenPriceInUsd = getNormalizedPrice(tokenId);
 
-        uint256 flowPerTokenRate = (flowPriceInUsd * 10 ** DECIMALS) /
-            tokenPriceInUsd;
+        uint256 flowPerTokenRate = (flowPriceInUsd * 10 ** DECIMALS) / tokenPriceInUsd;
 
-        IForeignToken(tokenAddress).buyTokens{value: ethForPurchase}(
-            flowPerTokenRate
-        );
+        IForeignToken(tokenAddress).buyTokens{value: ethForPurchase}(flowPerTokenRate);
 
         uint256 balanceAfter = IERC20(tokenAddress).balanceOf(address(this));
         uint256 tokenAmountReceived = balanceAfter - balanceBefore;
@@ -271,28 +258,39 @@ contract App {
 
         uint256 flowPriceInUsd = getNormalizedPrice(FLOW_USD);
         uint256 tokenPriceInUsd = getNormalizedPrice(tokenId);
-        uint256 flowPerTokenRate = (flowPriceInUsd * 10 ** DECIMALS) /
-            tokenPriceInUsd;
-        uint256 ethAmountToReceive = (tokenAmount * 10 ** DECIMALS) /
-            flowPerTokenRate;
+        uint256 flowPerTokenRate = (flowPriceInUsd * 10 ** DECIMALS) / tokenPriceInUsd;
+        uint256 ethAmountToReceive = (tokenAmount * 10 ** DECIMALS) / flowPerTokenRate;
 
-        IERC20(tokenAddress).transferFrom(
-            msg.sender,
-            address(this),
-            tokenAmount
-        );
+        IERC20(tokenAddress).transferFrom(msg.sender, address(this), tokenAmount);
         IForeignToken(tokenAddress).sellTokens(tokenAmount, flowPerTokenRate);
 
-        (bool success, ) = payable(msg.sender).call{value: ethAmountToReceive}(
-            ""
-        );
+        (bool success, ) = payable(msg.sender).call{value: ethAmountToReceive}("");
         require(success, "Transaction unsuccessful");
+
         emit TokensSoldForFlow(
             msg.sender,
             tokenAddress,
             tokenAmount,
             ethAmountToReceive
         );
+    }
+
+    function getUserNFTs(address user) external view returns (uint256[] memory) {
+        return userNFTs[user];
+    }
+
+    function getUserNFTCount(address user) external view returns (uint256) {
+        return userNFTs[user].length;
+    }
+
+    function userOwnsNFT(address user, uint256 nftId) external view returns (bool) {
+        uint256[] memory userNFTList = userNFTs[user];
+        for (uint256 i = 0; i < userNFTList.length; i++) {
+            if (userNFTList[i] == nftId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function executeBasket(
@@ -304,15 +302,12 @@ contract App {
         string memory _jsonMetadata,
         bytes[] calldata updateData
     ) external payable {
-        require(
-            _outputTokenNames.length == _outputPercentages.length,
-            "Arrays must have same length"
-        );
-        uint256 totalPercentage;
+        require(_outputTokenNames.length == _outputPercentages.length, "Arrays must have same length");
+        uint256 totalPercentage = 0;
         for (uint i = 0; i < _outputPercentages.length; i++) {
             totalPercentage += _outputPercentages[i];
         }
-        require(totalPercentage == 10000, "Percentages must sum to 10000");
+        require(totalPercentage == 10000, "Percentages must sum to 10000 basis points");
 
         uint256 fee = pyth.getUpdateFee(updateData);
         require(msg.value >= fee, "Insufficient fee for Pyth update");
@@ -323,20 +318,13 @@ contract App {
 
         address inputTokenAddress = nameToAddress[_inputTokenName];
         require(inputTokenAddress != address(0), "Invalid input token");
-        IERC20(inputTokenAddress).transferFrom(
-            msg.sender,
-            address(this),
-            _inputAmount
-        );
+        IERC20(inputTokenAddress).transferFrom(msg.sender, address(this), _inputAmount);
 
-        uint256[] memory outputAmounts = new uint256[](
-            _outputTokenNames.length
-        );
+        uint256[] memory outputAmounts = new uint256[](_outputTokenNames.length);
         uint256 inputTokenPrice = getNormalizedPrice(nameToId[_inputTokenName]);
 
         for (uint i = 0; i < _outputTokenNames.length; i++) {
-            uint256 amountToSwap = (_inputAmount * _outputPercentages[i]) /
-                10000;
+            uint256 amountToSwap = (_inputAmount * _outputPercentages[i]) / 10000;
             outputAmounts[i] = _performSwap(
                 inputTokenAddress,
                 _outputTokenNames[i],
@@ -355,6 +343,9 @@ contract App {
         });
 
         basketNFT.mintNFT(_jsonMetadata);
+
+        userNFTs[msg.sender].push(nftId);
+        nftIndex[nftId] = userNFTs[msg.sender].length - 1;
 
         emit BasketCreated(msg.sender, nftId, _outputTokenNames, outputAmounts);
     }
@@ -400,6 +391,8 @@ contract App {
         basketNFT.burn(_nftId);
         delete nftBaskets[_nftId];
 
+        _removeNFTFromUser(msg.sender, _nftId);
+
         IERC20(inputTokenAddress).transfer(msg.sender, totalRedeemedAmount);
 
         emit BasketRedeemed(msg.sender, _nftId, totalRedeemedAmount);
@@ -421,9 +414,7 @@ contract App {
         );
         uint256 rate = (_inputTokenPrice * SCALE) / outputTokenPrice;
 
-        address swapContractAddress = swapContracts[
-            getPairKey(_inputTokenAddress, outputTokenAddress)
-        ];
+        address swapContractAddress = swapContracts[getPairKey(_inputTokenAddress, outputTokenAddress)];
         require(swapContractAddress != address(0), "Swap contract not found");
 
         IERC20(_inputTokenAddress).approve(swapContractAddress, _amountToSwap);
@@ -452,9 +443,7 @@ contract App {
         );
         uint256 rate = (outputTokenPrice * SCALE) / _inputTokenPrice;
 
-        address swapContractAddress = swapContracts[
-            getPairKey(_outputTokenAddress, _inputTokenAddress)
-        ];
+        address swapContractAddress = swapContracts[getPairKey(_outputTokenAddress, _inputTokenAddress)];
         IERC20(_outputTokenAddress).approve(swapContractAddress, _outputAmount);
 
         if (_outputTokenAddress < _inputTokenAddress) {
@@ -467,5 +456,28 @@ contract App {
         uint256 feeAmount = (_outputAmount * 3) / 1000;
         uint256 amountAfterFee = _outputAmount - feeAmount;
         return (amountAfterFee * rate) / SCALE;
+    }
+
+    function _removeNFTFromUser(address user, uint256 nftId) internal {
+        uint256[] storage userNFTList = userNFTs[user];
+        uint256 index = nftIndex[nftId];
+        
+        // Move the last element to the deleted spot
+        if (index < userNFTList.length - 1) {
+            uint256 lastNFTId = userNFTList[userNFTList.length - 1];
+            userNFTList[index] = lastNFTId;
+            nftIndex[lastNFTId] = index;
+        }
+        
+        // Remove the last element
+        userNFTList.pop();
+        delete nftIndex[nftId];
+    }
+
+    receive() external payable {}
+
+    function withdrawETH(uint256 amount) external onlyOwner {
+        require(address(this).balance >= amount, "Insufficient ETH balance");
+        payable(owner()).transfer(amount);
     }
 }

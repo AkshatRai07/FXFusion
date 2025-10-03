@@ -12,26 +12,15 @@ contract BasketJsonNFT is ERC721URIStorage, ERC721Burnable {
     function mintNFT(string memory jsonMetadata) external {
         uint256 tokenId = nextTokenId;
         nextTokenId++;
-
         _safeMint(msg.sender, tokenId);
         _setTokenURI(tokenId, jsonMetadata);
     }
 
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        override(ERC721URIStorage, ERC721)
-        returns (string memory)
-    {
+    function tokenURI(uint256 tokenId) public view override(ERC721URIStorage, ERC721) returns (string memory) {
         return super.tokenURI(tokenId);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721URIStorage, ERC721)
-        returns (bool)
-    {
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721URIStorage, ERC721) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 }

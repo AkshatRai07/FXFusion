@@ -76,6 +76,33 @@ contract DeployYourContract is Script {
         usdToken.setAppContract(address(app));
         yenToken.setAppContract(address(app));
 
+        console.log("\n=== FiatSwap Contract Addresses ===");
+        address[6] memory tokens = [
+            address(chfToken),
+            address(eurToken),
+            address(gbpToken),
+            address(inrToken),
+            address(usdToken),
+            address(yenToken)
+        ];
+
+        string[6] memory tokenNames = ["fCHF", "fEUR", "fGBP", "fINR", "fUSD", "fYEN"];
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            for (uint256 j = i + 1; j < tokens.length; j++) {
+                // Create pair key (same logic as App.sol)
+                bytes32 pairKey = tokens[i] < tokens[j] 
+                    ? keccak256(abi.encodePacked(tokens[i], tokens[j]))
+                    : keccak256(abi.encodePacked(tokens[j], tokens[i]));
+                
+                // Get the FiatSwap contract address
+                address swapAddress = app.swapContracts(pairKey);
+                
+                // Log with readable pair names
+                console.log("FiatSwap %s-%s:", tokenNames[i], tokenNames[j], swapAddress);
+            }
+        }
+
         vm.stopBroadcast();
 
         // Log all deployed contract addresses

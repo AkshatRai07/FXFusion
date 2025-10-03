@@ -39,4 +39,6 @@ contract fCHF is ERC20, Ownable {
         _transfer(msg.sender, address(this), tokenAmount);
         payable(msg.sender).transfer(ethAmount);
     }
+
+    receive() external payable {}
 }
