@@ -16,18 +16,45 @@ contract DeployYourContract is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy all token contracts
+        // Deploy all token contracts with delays
+        console.log("Deploying fCHF Token...");
         fCHF chfToken = new fCHF();
+        console.log("fCHF deployed at:", address(chfToken));
+        vm.sleep(10000); // 10 seconds delay
+
+        console.log("Deploying fEUR Token...");
         fEUR eurToken = new fEUR();
+        console.log("fEUR deployed at:", address(eurToken));
+        vm.sleep(10000); // 10 seconds delay
+
+        console.log("Deploying fGBP Token...");
         fGBP gbpToken = new fGBP();
+        console.log("fGBP deployed at:", address(gbpToken));
+        vm.sleep(10000); // 10 seconds delay
+
+        console.log("Deploying fINR Token...");
         fINR inrToken = new fINR();
+        console.log("fINR deployed at:", address(inrToken));
+        vm.sleep(10000); // 10 seconds delay
+
+        console.log("Deploying fUSD Token...");
         fUSD usdToken = new fUSD();
+        console.log("fUSD deployed at:", address(usdToken));
+        vm.sleep(10000); // 10 seconds delay
+
+        console.log("Deploying fYEN Token...");
         fYEN yenToken = new fYEN();
+        console.log("fYEN deployed at:", address(yenToken));
+        vm.sleep(10000); // 10 seconds delay
 
         // Deploy NFT contract
+        console.log("Deploying BasketJsonNFT...");
         BasketJsonNFT basketNFT = new BasketJsonNFT();
+        console.log("BasketJsonNFT deployed at:", address(basketNFT));
+        vm.sleep(10000); // 10 seconds delay
 
         // Deploy main app contract with all addresses
+        console.log("Deploying App contract...");
         App app = new App(
             address(chfToken),
             address(eurToken),
@@ -37,11 +64,22 @@ contract DeployYourContract is Script {
             address(yenToken),
             address(basketNFT)
         );
+        console.log("App deployed at:", address(app));
+        vm.sleep(10000); // 10 seconds delay
+
+        // Set App contract as authorized in all token contracts
+        console.log("Setting App contract authorization...");
+        chfToken.setAppContract(address(app));
+        eurToken.setAppContract(address(app));
+        gbpToken.setAppContract(address(app));
+        inrToken.setAppContract(address(app));
+        usdToken.setAppContract(address(app));
+        yenToken.setAppContract(address(app));
 
         vm.stopBroadcast();
 
         // Log all deployed contract addresses
-        console.log("=== Deployed Contract Addresses ===");
+        console.log("\n=== Final Deployed Contract Addresses ===");
         console.log("fCHF Token:", address(chfToken));
         console.log("fEUR Token:", address(eurToken));
         console.log("fGBP Token:", address(gbpToken));

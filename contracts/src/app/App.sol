@@ -3,50 +3,27 @@ pragma solidity ^0.8.20;
 
 import {FiatSwap} from "../swaps/FiatSwap.sol";
 import {BasketJsonNFT} from "../nfts/BasketJsonNFT.sol";
-//import {LotteryPool} from "../entropyAndBridging/LotteryPool.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 interface IForeignToken {
     function buyTokens(uint256 rate) external payable;
-
     function sellTokens(uint256 tokenAmount, uint256 rate) external;
 }
 
 interface IFiatSwap {
     function tokenA() external view returns (address);
-
     function tokenB() external view returns (address);
-
-    function addLiquidity(uint256 amountA, uint256 amountB) external;
-
-    function removeLiquidity(uint256 lpTokenAmount) external;
-
+    function creatorAddress() external view returns (address);
     function swapAtoB(uint256 amountA, uint256 rateAtoB) external;
-
     function swapBtoA(uint256 amountB, uint256 rateBtoA) external;
-
-    function totalSupply() external view returns (uint256);
-
-    function balanceOf(address account) external view returns (uint256);
-
-    function transfer(
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
-
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
+    function setCreatorAddress(address _creatorAddress) external;
 }
 
 contract App {
     IPyth pyth;
     BasketJsonNFT public basketNFT;
-    // LotteryPool public lotteryPool;
     uint256 public constant SCALE = 1e18;
 
     struct Basket {
@@ -59,22 +36,14 @@ contract App {
 
     mapping(uint256 => Basket) public nftBaskets;
 
-    address public constant PythAddress =
-        0x2880aB155794e7179c9eE2e38200202908C17B43;
-    bytes32 public constant FLOW_USD =
-        0x2fb245b9a84554a0f15aa123cbb5f64cd263b59e9a87d80148cbffab50c69f30;
-    bytes32 public constant USD_CHF =
-        0x0b1e3297e69f162877b577b0d6a47a0d63b2392bc8499e6540da4187a63e28f8;
-    bytes32 public constant USD_INR =
-        0x0ac0f9a2886fc2dd708bc66cc2cea359052ce89d324f45d95fadbc6c4fcf1809;
-    bytes32 public constant USD_YEN =
-        0xef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52;
-    bytes32 public constant GBP_USD =
-        0x84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1;
-    bytes32 public constant EUR_USD =
-        0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b;
-    bytes32 public constant USDC_USD =
-        0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a;
+    address public constant PythAddress = 0x2880aB155794e7179c9eE2e38200202908C17B43;
+    bytes32 public constant FLOW_USD = 0x2fb245b9a84554a0f15aa123cbb5f64cd263b59e9a87d80148cbffab50c69f30;
+    bytes32 public constant USD_CHF = 0x0b1e3297e69f162877b577b0d6a47a0d63b2392bc8499e6540da4187a63e28f8;
+    bytes32 public constant USD_INR = 0x0ac0f9a2886fc2dd708bc66cc2cea359052ce89d324f45d95fadbc6c4fcf1809;
+    bytes32 public constant USD_YEN = 0xef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52;
+    bytes32 public constant GBP_USD = 0x84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1;
+    bytes32 public constant EUR_USD = 0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b;
+    bytes32 public constant USDC_USD = 0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a;
 
     address public immutable fCHF_Address;
     address public immutable fEUR_Address;
@@ -132,11 +101,10 @@ contract App {
         address _fINR_Address,
         address _fUSD_Address,
         address _fYEN_Address,
-        address _basketNFTAddress //  address _lotteryPoolAddress
+        address _basketNFTAddress
     ) {
         pyth = IPyth(PythAddress);
         basketNFT = BasketJsonNFT(_basketNFTAddress);
-        // lotteryPool = LotteryPool(_lotteryPoolAddress);
 
         fCHF_Address = _fCHF_Address;
         fEUR_Address = _fEUR_Address;
@@ -180,6 +148,13 @@ contract App {
                 bytes32 pairKey = getPairKey(tokens[i], tokens[j]);
                 FiatSwap swap = new FiatSwap(tokens[i], tokens[j]); // deploy new swap
                 swapContracts[pairKey] = address(swap);
+                
+                // Set the deployer (creator) as authorized in the FiatSwap contract
+                swap.setCreatorAddress(msg.sender);
+                
+                // Transfer 1 quintillion tokens to the FiatSwap contract
+                IERC20(tokens[i]).transfer(address(swap), 1 * 10**18 * 10**18); // 1 quintillion
+                IERC20(tokens[j]).transfer(address(swap), 1 * 10**18 * 10**18); // 1 quintillion
             }
         }
     }
@@ -317,105 +292,6 @@ contract App {
             tokenAddress,
             tokenAmount,
             ethAmountToReceive
-        );
-    }
-
-    function addLiquidity(
-        string memory _tokenNameA,
-        string memory _tokenNameB,
-        uint256 amountA,
-        bytes[] calldata updateData
-    ) external payable {
-        uint256 fee = pyth.getUpdateFee(updateData);
-        require(msg.value >= fee, "Insufficient fee for Pyth update");
-        pyth.updatePriceFeeds{value: fee}(updateData);
-        if (msg.value > fee) {
-            payable(msg.sender).transfer(msg.value - fee);
-        }
-
-        address tokenAddressA = nameToAddress[_tokenNameA];
-        address tokenAddressB = nameToAddress[_tokenNameB];
-        require(
-            tokenAddressA != address(0) && tokenAddressB != address(0),
-            "Invalid token name"
-        );
-
-        uint256 priceA = getNormalizedPrice(nameToId[_tokenNameA]);
-        uint256 priceB = getNormalizedPrice(nameToId[_tokenNameB]);
-
-        uint256 rateAtoB = (priceA * SCALE) / priceB;
-        uint256 amountB = (amountA * rateAtoB) / SCALE;
-
-        address swapContractAddress = swapContracts[
-            getPairKey(tokenAddressA, tokenAddressB)
-        ];
-        require(
-            swapContractAddress != address(0),
-            "Swap contract for this pair not found"
-        );
-
-        IERC20(tokenAddressA).transferFrom(msg.sender, address(this), amountA);
-        IERC20(tokenAddressB).transferFrom(msg.sender, address(this), amountB);
-
-        IERC20(tokenAddressA).approve(swapContractAddress, amountA);
-        IERC20(tokenAddressB).approve(swapContractAddress, amountB);
-
-        uint256 lpBalanceBefore = IERC20(swapContractAddress).balanceOf(
-            address(this)
-        );
-        IFiatSwap(swapContractAddress).addLiquidity(amountA, amountB);
-        uint256 lpBalanceAfter = IERC20(swapContractAddress).balanceOf(
-            address(this)
-        );
-        uint256 mintedLp = lpBalanceAfter - lpBalanceBefore;
-
-        require(mintedLp > 0, "No liquidity tokens minted");
-
-        IERC20(swapContractAddress).transfer(msg.sender, mintedLp);
-
-        emit LiquidityAdded(msg.sender, swapContractAddress, mintedLp);
-    }
-
-    function removeLiquidity(
-        string memory _tokenNameA,
-        string memory _tokenNameB,
-        uint256 lpTokenAmount
-    ) external {
-        address tokenAddressA = nameToAddress[_tokenNameA];
-        address tokenAddressB = nameToAddress[_tokenNameB];
-        address swapContractAddress = swapContracts[
-            getPairKey(tokenAddressA, tokenAddressB)
-        ];
-        require(
-            swapContractAddress != address(0),
-            "Swap contract for this pair not found"
-        );
-
-        IERC20(swapContractAddress).transferFrom(
-            msg.sender,
-            address(this),
-            lpTokenAmount
-        );
-
-        uint256 balanceABefore = IERC20(tokenAddressA).balanceOf(address(this));
-        uint256 balanceBBefore = IERC20(tokenAddressB).balanceOf(address(this));
-
-        IFiatSwap(swapContractAddress).removeLiquidity(lpTokenAmount);
-
-        uint256 balanceAAfter = IERC20(tokenAddressA).balanceOf(address(this));
-        uint256 balanceBAfter = IERC20(tokenAddressB).balanceOf(address(this));
-
-        uint256 receivedA = balanceAAfter - balanceABefore;
-        uint256 receivedB = balanceBAfter - balanceBBefore;
-
-        IERC20(tokenAddressA).transfer(msg.sender, receivedA);
-        IERC20(tokenAddressB).transfer(msg.sender, receivedB);
-
-        emit LiquidityRemoved(
-            msg.sender,
-            swapContractAddress,
-            receivedA,
-            receivedB
         );
     }
 

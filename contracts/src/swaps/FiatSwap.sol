@@ -1,60 +1,34 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract FiatSwap is ERC20 {
+contract FiatSwap is Ownable {
     IERC20 public immutable tokenA;
     IERC20 public immutable tokenB;
+    address public creatorAddress;
 
     uint256 public constant FEE_NUM = 3;    // 0.3% fee numerator
     uint256 public constant FEE_DEN = 1000; // denominator
     uint256 public constant SCALE = 1e18;
 
-    constructor(address _tokenA, address _tokenB)
-        ERC20("FiatSwap LP", "FSLP")
-    {
+    modifier onlyAuthorized() {
+        require(msg.sender == owner() || msg.sender == creatorAddress, "Not authorized");
+        _;
+    }
+
+    constructor(address _tokenA, address _tokenB) Ownable(msg.sender) {
         tokenA = IERC20(_tokenA);
         tokenB = IERC20(_tokenB);
     }
 
-    function addLiquidity(uint256 amountA, uint256 amountB) external {
-        require(amountA > 0 && amountB > 0, "Must provide both tokens");
-
-        require(tokenA.transferFrom(msg.sender, address(this), amountA), "TokenA transfer failed");
-        require(tokenB.transferFrom(msg.sender, address(this), amountB), "TokenB transfer failed");
-
-        uint256 lpTokensToMint;
-        if (totalSupply() == 0) {
-            lpTokensToMint = amountA;
-        } else {
-            uint256 reserveA = tokenA.balanceOf(address(this)) - amountA;
-            lpTokensToMint = (amountA * totalSupply()) / reserveA;
-        }
-
-        require(lpTokensToMint > 0, "Insufficient liquidity minted");
-        _mint(msg.sender, lpTokensToMint);
+    function setCreatorAddress(address _creatorAddress) external onlyOwner {
+        require(_creatorAddress != address(0), "Invalid creator address");
+        creatorAddress = _creatorAddress;
     }
 
-    function removeLiquidity(uint256 lpTokenAmount) external {
-        require(lpTokenAmount > 0, "Must remove > 0 LP tokens");
-        require(balanceOf(msg.sender) >= lpTokenAmount, "Insufficient LP balance");
-
-        uint256 totalReserveA = tokenA.balanceOf(address(this));
-        uint256 totalReserveB = tokenB.balanceOf(address(this));
-        uint256 totalLPSupply = totalSupply();
-
-        uint256 amountAToReturn = (lpTokenAmount * totalReserveA) / totalLPSupply;
-        uint256 amountBToReturn = (lpTokenAmount * totalReserveB) / totalLPSupply;
-
-        _burn(msg.sender, lpTokenAmount);
-
-        require(tokenA.transfer(msg.sender, amountAToReturn), "TokenA transfer failed");
-        require(tokenB.transfer(msg.sender, amountBToReturn), "TokenB transfer failed");
-    }
-
-    function swapAtoB(uint256 amountA, uint256 rateAtoB) external {
+    function swapAtoB(uint256 amountA, uint256 rateAtoB) external onlyAuthorized {
         require(amountA > 0, "Invalid amount");
 
         uint256 fee = (amountA * FEE_NUM) / FEE_DEN;
@@ -66,7 +40,7 @@ contract FiatSwap is ERC20 {
         require(tokenB.transfer(msg.sender, amountB), "TokenB transfer failed");
     }
 
-    function swapBtoA(uint256 amountB, uint256 rateBtoA) external {
+    function swapBtoA(uint256 amountB, uint256 rateBtoA) external onlyAuthorized {
         require(amountB > 0, "Invalid amount");
 
         uint256 fee = (amountB * FEE_NUM) / FEE_DEN;
