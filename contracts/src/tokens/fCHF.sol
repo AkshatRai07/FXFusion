@@ -6,6 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract fCHF is ERC20, Ownable {
     address public appContract;
+    uint256 public constant SCALE = 1e18;
 
     constructor() ERC20("flowCHF", "fCHF") Ownable(msg.sender) {
         _mint(address(this), 10 * 10 ** 18 * 10 ** decimals()); // 10 quintillion fCHF
@@ -24,7 +25,7 @@ contract fCHF is ERC20, Ownable {
     function buyTokens(uint256 rate) external payable onlyAuthorized {
         require(msg.value > 0, "Send ETH to buy fCHF");
 
-        uint256 tokenAmount = msg.value * rate;
+        uint256 tokenAmount = (msg.value * rate) / SCALE;
         require(balanceOf(address(this)) >= tokenAmount, "Not enough fCHF in contract");
 
         _transfer(address(this), msg.sender, tokenAmount);
@@ -33,7 +34,7 @@ contract fCHF is ERC20, Ownable {
     function sellTokens(uint256 tokenAmount, uint256 rate) external onlyAuthorized {
         require(tokenAmount > 0, "Must sell > 0 tokens");
 
-        uint256 ethAmount = tokenAmount / rate;
+        uint256 ethAmount = (tokenAmount * SCALE) / rate;
         require(address(this).balance >= ethAmount, "Not enough ETH liquidity");
 
         _transfer(msg.sender, address(this), tokenAmount);

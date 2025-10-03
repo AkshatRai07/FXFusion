@@ -194,7 +194,7 @@ contract App is Ownable {
     }
 
     function getNormalizedPrice(bytes32 priceId) public view returns (uint256) {
-        PythStructs.Price memory pythPrice = pyth.getPriceUnsafe(priceId);
+        PythStructs.Price memory pythPrice = pyth.getPriceNoOlderThan(priceId, 60);
         require(pythPrice.price > 0, "Pyth price is invalid");
 
         uint256 price = uint256(int256(pythPrice.price));
@@ -207,13 +207,13 @@ contract App is Ownable {
             priceId == EUR_USD ||
             priceId == USDC_USD
         ) {
-            return (10 ** expo * 10 ** DECIMALS) / price;
+            return (price * 10 ** DECIMALS) / 10 ** expo;
         }
         // Handle USD/XYZ pairs.
         else if (
             priceId == USD_CHF || priceId == USD_INR || priceId == USD_YEN
         ) {
-            return (price * 10 ** DECIMALS) / 10 ** expo;
+            return (10 ** expo * 10 ** DECIMALS) / price;
         } else {
             revert("Price feed not supported");
         }

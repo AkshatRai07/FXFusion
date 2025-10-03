@@ -43,7 +43,7 @@ export default function Dashboard() {
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
                 <ShoppingCart className="w-4 h-4 mr-2" />
-                Buy/Sell Tokens
+                Buy Tokens
               </Button>
             </div>
           </div>

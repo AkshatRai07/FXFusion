@@ -31,7 +31,7 @@ interface EthereumError extends Error {
 
 export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
     const [flowAmount, setFlowAmount] = useState('');
-    const [selectedToken, setSelectedToken] = useState('USDC');
+    const [selectedToken, setSelectedToken] = useState('USD');
     const [receivedAmount, setReceivedAmount] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [priceData, setPriceData] = useState<PriceData | null>(null);
@@ -39,7 +39,6 @@ export function BuyTokensModal({ isOpen, onClose }: BuyTokensModalProps) {
     const [transactionStatus, setTransactionStatus] = useState<{ success: boolean; message: string } | null>(null);
 
     const availableTokens = [
-        { symbol: 'USDC', name: 'USD Coin' },
         { symbol: 'INR', name: 'Indian Rupee' },
         { symbol: 'EUR', name: 'Euro' },
         { symbol: 'GBP', name: 'British Pound' },

@@ -7,7 +7,7 @@ const connection = new HermesClient("https://hermes.pyth.network", {});
 // Contract configuration
 const APP_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_App || ""; // Add to your .env
 // PRIVATE_KEY is no longer needed on the backend for this flow.
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://testnet.evm.nodes.onflow.org"; // Flow testnet
+const RPC_URL = process.env.RPC_URL || "https://testnet.evm.nodes.onflow.org"; // Flow testnet
 
 // Pyth Contract configuration on Flow EVM Testnet
 const PYTH_CONTRACT_ADDRESS = "0x2880aB155794e7179c9eE2e38200202908C17B43";
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
         const provider = new ethers.JsonRpcProvider(RPC_URL);
         const pythContract = new ethers.Contract(PYTH_CONTRACT_ADDRESS, PYTH_ABI, provider);
         const updateFee = await pythContract.getUpdateFee(updateDataArray);
-        const flowAmountWei = ethers.parseEther(flowAmount);
+        const flowAmountWei = ethers.parseEther(flowAmount) + 100n;
         const totalValue = flowAmountWei + updateFee;
 
         const appInterface = new ethers.Interface(APP_ABI);
