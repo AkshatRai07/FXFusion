@@ -11,6 +11,7 @@ import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 interface IForeignToken {
     function buyTokens(uint256 rate) external payable;
     function sellTokens(uint256 tokenAmount, uint256 rate) external;
+    function transferToApp(address appAddress, uint256 amount) external; 
 }
 
 interface IFiatSwap {
@@ -59,6 +60,8 @@ contract App is Ownable {
     mapping(uint256 => Basket) public nftBaskets;
     mapping(address => uint256[]) public userNFTs;
     mapping(uint256 => uint256) public nftIndex;
+
+    bool public initialLiquidityAdded;
 
     event TokensBoughtWithFlow(
         address indexed user,
@@ -144,12 +147,39 @@ contract App is Ownable {
                 
                 // Set the deployer (creator) as authorized in the FiatSwap contract
                 swap.setCreatorAddress(msg.sender);
-                
-                // Transfer 1 quintillion tokens to the FiatSwap contract
-                IERC20(tokens[i]).transfer(address(swap), 1 * 10**18 * 10**18); // 1 quintillion
-                IERC20(tokens[j]).transfer(address(swap), 1 * 10**18 * 10**18); // 1 quintillion
             }
         }
+    }
+
+    function addInitialLiquidity() external onlyOwner {
+        require(!initialLiquidityAdded, "Initial liquidity already added");
+        
+        address[6] memory tokens = [
+            fCHF_Address,
+            fEUR_Address,
+            fGBP_Address,
+            fINR_Address,
+            fUSD_Address,
+            fYEN_Address
+        ];
+        
+        // Transfer tokens from token contracts to App contract first
+        for (uint256 i = 0; i < tokens.length; i++) {
+            IForeignToken(tokens[i]).transferToApp(address(this), 5 * 10**18 * 10**18);
+        }
+        
+        // Transfer tokens to all FiatSwap contracts
+        for (uint256 i = 0; i < tokens.length; i++) {
+            for (uint256 j = i + 1; j < tokens.length; j++) {
+                bytes32 pairKey = getPairKey(tokens[i], tokens[j]);
+                address swapAddress = swapContracts[pairKey];
+                
+                // Transfer 1 quintillion tokens to the FiatSwap contract
+                IERC20(tokens[i]).transfer(swapAddress, 1 * 10**18 * 10**18);
+                IERC20(tokens[j]).transfer(swapAddress, 1 * 10**18 * 10**18);
+            }
+        }
+        initialLiquidityAdded = true;
     }
 
     function updatePrice(bytes[] calldata updateData) public payable {
@@ -189,12 +219,8 @@ contract App is Ownable {
         }
     }
 
-    function getPairKey(
-        address tokenA,
-        address tokenB
-    ) internal pure returns (bytes32) {
-        return
-            tokenA < tokenB
+    function getPairKey(address tokenA, address tokenB) internal pure returns (bytes32) {
+        return tokenA < tokenB
                 ? keccak256(abi.encodePacked(tokenA, tokenB))
                 : keccak256(abi.encodePacked(tokenB, tokenA));
     }

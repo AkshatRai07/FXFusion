@@ -40,5 +40,11 @@ contract fINR is ERC20, Ownable {
         payable(msg.sender).transfer(ethAmount);
     }
 
+    function transferToApp(address appAddress, uint256 amount) external onlyAuthorized {
+        require(appAddress != address(0), "Invalid app address");
+        require(balanceOf(address(this)) >= amount, "Insufficient balance");
+        _transfer(address(this), appAddress, amount);
+    }
+
     receive() external payable {}
 }

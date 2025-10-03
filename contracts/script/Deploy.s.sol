@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
 import "../src/app/App.sol";
@@ -20,38 +20,38 @@ contract DeployYourContract is Script {
         console.log("Deploying fCHF Token...");
         fCHF chfToken = new fCHF();
         console.log("fCHF deployed at:", address(chfToken));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         console.log("Deploying fEUR Token...");
         fEUR eurToken = new fEUR();
         console.log("fEUR deployed at:", address(eurToken));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         console.log("Deploying fGBP Token...");
         fGBP gbpToken = new fGBP();
         console.log("fGBP deployed at:", address(gbpToken));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         console.log("Deploying fINR Token...");
         fINR inrToken = new fINR();
         console.log("fINR deployed at:", address(inrToken));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         console.log("Deploying fUSD Token...");
         fUSD usdToken = new fUSD();
         console.log("fUSD deployed at:", address(usdToken));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         console.log("Deploying fYEN Token...");
         fYEN yenToken = new fYEN();
         console.log("fYEN deployed at:", address(yenToken));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         // Deploy NFT contract
         console.log("Deploying BasketJsonNFT...");
         BasketJsonNFT basketNFT = new BasketJsonNFT();
         console.log("BasketJsonNFT deployed at:", address(basketNFT));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         // Deploy main app contract with all addresses
         console.log("Deploying App contract...");
@@ -65,7 +65,7 @@ contract DeployYourContract is Script {
             address(basketNFT)
         );
         console.log("App deployed at:", address(app));
-        vm.sleep(10000); // 10 seconds delay
+        vm.sleep(2000); // 2 seconds delay
 
         // Set App contract as authorized in all token contracts
         console.log("Setting App contract authorization...");
@@ -75,6 +75,11 @@ contract DeployYourContract is Script {
         inrToken.setAppContract(address(app));
         usdToken.setAppContract(address(app));
         yenToken.setAppContract(address(app));
+
+        // Add initial liquidity to FiatSwap contracts
+        console.log("Adding initial liquidity to FiatSwap contracts...");
+        app.addInitialLiquidity();
+        console.log("Initial liquidity added successfully");
 
         console.log("\n=== FiatSwap Contract Addresses ===");
         address[6] memory tokens = [
